@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
 });
 
 // Routes
-app.use('/api/v1', apiRouter);
+app.use('/api/v2', apiRouter);
 
 // Health check
 app.get('/health', (req, res) => {
