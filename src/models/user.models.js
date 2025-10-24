@@ -1,6 +1,6 @@
 import { pool } from '../config/db.js';
 
-export const userModel = {
+export const authModels = {
     userGoogle: async (googleUserData) => {
         const { google_id, email, name, picture } = googleUserData;
 

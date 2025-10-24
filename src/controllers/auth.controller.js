@@ -6,12 +6,13 @@ import { google } from 'googleapis';
 import {
   generateToken,
   generateRefreshToken,
-} from '../services/userTokenServices';
+} from '../services/userTokenServices.js';
 
 import { tokenModel } from '../models/token.model.js';
 import { getTokens, deleteTokens } from '../models/google.model.js';
 // import { referralModels } from '../models/referral.models.js';
-import { upsertTokens, isGoogleStillConnected } from '../services/googleTokenService.js';
+import { isGoogleStillConnected } from '../services/googleTokenService.js';
+import { upsertTokens } from '../models/google.model.js';
 
 dotenv.config();
 

@@ -1,4 +1,4 @@
-import pool from '../config/db.js';
+import {pool} from '../config/db.js';
 
 export async function upsertTokens(userId, tokens) {
   const { access_token, refresh_token, scope, token_type, expiry_date, id_token } = tokens;

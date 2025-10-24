@@ -4,11 +4,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
 });
 
-async function runSQL(sqlQuery) {
+export async function runSQL(sqlQuery) {
   try {
     const result = await pool.query(sqlQuery);
     return result.rows;
@@ -17,5 +17,3 @@ async function runSQL(sqlQuery) {
     throw error;
   }
 }
-
-module.exports = { pool, runSQL };
