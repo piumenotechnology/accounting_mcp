@@ -33,9 +33,6 @@ export const auth = {
         try {
           const ticket = await client.verifyIdToken({ idToken, audience: aud });
           payload = ticket.getPayload();
-
-          console.log(payload);
-
           break;
         } catch (_) {
           console.log("error tisckets");
@@ -233,7 +230,6 @@ export const auth = {
       res.status(500).json({ error: 'Failed to revoke Google tokens' });
     }
   },
-
   consentUser: async (req, res) => {
     try {
       const CID  = process.env.GOOGLE_WEB_CLIENT_ID;
