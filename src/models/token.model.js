@@ -1,5 +1,5 @@
 import { pool } from '../config/db.js';
-import { hashToken } from '../services/userTokenServices.js';
+import { hashToken } from '../services/user-token.js';
 
 export const tokenModel = {
     createToken: async (token, client = pool) => {
