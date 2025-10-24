@@ -6,7 +6,7 @@ import { google } from 'googleapis';
 import {
   generateToken,
   generateRefreshToken,
-} from '../services/tokenServices';
+} from '../services/userTokenServices';
 
 import { tokenModel } from '../models/token.model.js';
 import { getTokens, deleteTokens } from '../models/google.model.js';
@@ -224,7 +224,7 @@ export const auth = {
       res.status(500).json({ error: 'Failed to revoke Google tokens' });
     }
   },
-  
+
   consentUser: async (req, res) => {
     try {
       const CID  = process.env.GOOGLE_WEB_CLIENT_ID;
