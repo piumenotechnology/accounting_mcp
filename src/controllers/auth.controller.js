@@ -172,8 +172,6 @@ export const auth = {
       // 2️⃣ Get Google tokens
       const tokens = await getTokens(userId);
 
-      console.log(tokens);
-
       // 3️⃣ Only revoke if there is an access_token but NOT a refresh_token
       if (tokens && tokens.access_token && !tokens.refresh_token) {
         try {
