@@ -9,5 +9,7 @@ router.post("/refresh", requireAuth, auth.refresh);
 router.post("/logout", requireAuth, auth.logoutGoogle);
 router.post("/mobile-exchange", auth.consentUser)
 
+router.post("/revoke-google-tokens", auth.revokeGoogleTokens);
+
 export default router;
 
