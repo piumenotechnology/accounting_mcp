@@ -1,13 +1,14 @@
-# Multi-Model MCP Backend
+# Multi-Model MCP Backend with OpenRouter
 
-Backend with Claude, OpenAI, and Gemini support using MCP tools.
+Backend using **OpenRouter** for Claude, GPT-4, and Gemini with MCP tools.
 
 ## Features
 
-- 🤖 **Multiple AI Models**: Claude, GPT-4, Gemini
-- 🔧 **MCP Tools**: Counter tool (easily extensible)
-- 🎯 **Smart Routing**: Automatically selects best model for task
-- 🔄 **Function Calling**: All models can use MCP tools
+- 🚀 **OpenRouter Integration**: Single API for all models
+- 🤖 **Multiple AI Models**: Claude, GPT-4, Gemini, Llama
+- 🔧 **MCP Tools**: Extensible tool system
+- 🎯 **Smart Routing**: Auto-selects best model
+- 💰 **Cost Tracking**: Token usage monitoring
 
 ## Setup
 
@@ -16,19 +17,20 @@ Backend with Claude, OpenAI, and Gemini support using MCP tools.
 npm install
 ```
 
-2. Create `.env` file:
+2. Get OpenRouter API Key:
+   - Go to https://openrouter.ai/
+   - Sign up and get your API key
+   - You get **$1 free credit** to start!
+
+3. Create `.env` file:
 ```bash
 cp .env.example .env
 ```
 
-3. Add your API keys to `.env`:
+4. Add your OpenRouter API key:
 ```env
-ANTHROPIC_API_KEY=sk-ant-xxx
-OPENAI_API_KEY=sk-xxx
-GOOGLE_API_KEY=xxx
+OPENROUTER_API_KEY=sk-or-v1-xxxxx
 ```
-
-**Note:** You can configure just one or all three models.
 
 ## Run
 ```bash
@@ -38,23 +40,34 @@ npm run dev
 ## Test
 
 ### Automatic Model Selection
-
-The system automatically selects the best model based on your message:
 ```bash
-# Uses Claude (complex reasoning)
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Analyze the algorithm complexity of bubble sort"}'
-
-# Uses GPT-4 (creative writing)
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Write a short story about a robot"}'
-
-# Uses Gemini (simple/quick task)
+# Uses Gemini (FREE, simple task)
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Count from 1 to 10"}'
+
+# Uses Claude (complex reasoning)
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Analyze the complexity of this counting algorithm"}'
+
+# Uses GPT-4 (creative)
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Write a poem about numbers"}'
+```
+
+### Manual Model Selection
+```bash
+# Force specific model
+curl -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Count from 1 to 5",
+    "model": "claude"
+  }'
+
+# Available models: claude, gpt4, gemini, gpt-3.5, llama
 ```
 
 ### Check Available Models
@@ -65,31 +78,54 @@ curl http://localhost:3000/api/models
 Response:
 ```json
 {
-  "available": {
-    "claude": true,
-    "openai": true,
-    "gemini": true
-  },
-  "models": {
-    "claude": "Claude Sonnet 4.5 - Complex reasoning, analysis, coding",
-    "openai": "GPT-4 Turbo - Creative writing, general conversation",
-    "gemini": "Gemini 2.0 Flash - Quick tasks, cost-effective"
-  }
+  "models": [
+    {
+      "id": "claude",
+      "name": "Claude Sonnet 4.5",
+      "modelId": "anthropic/claude-sonnet-4-5-20250929",
+      "strengths": "Complex reasoning, analysis, coding",
+      "cost": "$$$"
+    },
+    {
+      "id": "gpt4",
+      "name": "GPT-4 Turbo",
+      "modelId": "openai/gpt-4-turbo",
+      "strengths": "Creative writing, general conversation",
+      "cost": "$$"
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini 2.0 Flash",
+      "modelId": "google/gemini-2.0-flash-exp:free",
+      "strengths": "Quick tasks, cost-effective",
+      "cost": "FREE"
+    }
+  ]
 }
 ```
 
-## Model Selection Rules
+## Model Costs (via OpenRouter)
 
-| Keywords | Selected Model | Reason |
-|----------|---------------|--------|
-| analyze, complex, code, debug | Claude | Best reasoning |
-| write, creative, story, poem | GPT-4 | Best creative |
-| count, calculate, simple | Gemini | Cheapest |
-| (default) | Gemini | Cost-effective |
+| Model | Cost per 1M tokens | Best For |
+|-------|-------------------|----------|
+| Gemini 2.0 Flash | **FREE** | Simple tasks, testing |
+| Llama 3.1 8B | **FREE** | Open source, experimentation |
+| GPT-3.5 Turbo | $0.50 | Fast, general purpose |
+| GPT-4 Turbo | $10 | Creative, complex tasks |
+| Claude Sonnet 4.5 | $15 | Best reasoning, coding |
+
+## OpenRouter Benefits
+
+✅ **One API key** for all models  
+✅ **$1 free credit** to start  
+✅ **Automatic fallback** if model unavailable  
+✅ **Usage tracking** and analytics  
+✅ **Cost optimization** built-in  
+✅ **No rate limits** (pay-as-you-go)  
 
 ## Examples
 
-### Example 1: Counting (Gemini)
+### Example 1: Simple Count (Gemini - FREE)
 ```bash
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
@@ -99,61 +135,67 @@ curl -X POST http://localhost:3000/api/chat \
 Response:
 ```json
 {
-  "message": "Here are the numbers from 1 to 5: 1, 2, 3, 4, 5",
+  "message": "Here are the numbers: 1, 2, 3, 4, 5",
   "toolsCalled": ["count"],
-  "model": "gemini-2.0-flash"
+  "model": "google/gemini-2.0-flash-exp:free",
+  "usage": {
+    "prompt_tokens": 150,
+    "completion_tokens": 25,
+    "total_tokens": 175
+  }
 }
 ```
 
-### Example 2: Complex Analysis (Claude)
+### Example 2: With Calculator
 ```bash
 curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Analyze the complexity of counting from 1 to 100"}'
+  -d '{"message": "Count from 1 to 5 and add them all"}'
 ```
 
-Response:
-```json
-{
-  "message": "Let me count and analyze... [detailed analysis]",
-  "toolsCalled": ["count"],
-  "model": "claude-sonnet-4-5"
-}
-```
-
-### Example 3: Creative (GPT-4)
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Write a poem about counting"}'
-```
-
-Response:
-```json
-{
-  "message": "One by one, the numbers rise...",
-  "toolsCalled": [],
-  "model": "gpt-4o-mini"
-}
-```
+Response uses both `count` and `calculate` tools!
 
 ## Architecture
 ```
-Request → Express → AI Orchestrator → Model Selector
-                          ↓
-                    [Claude/OpenAI/Gemini]
-                          ↓
-                    MCP Client
-                          ↓
-                    MCP Server
-                          ↓
-                    Counter Tool
+Request → Express
+    ↓
+AI Orchestrator → Model Selector
+    ↓
+OpenRouter (single client)
+    ↓
+[Claude / GPT-4 / Gemini / Llama]
+    ↓
+MCP Client → MCP Server → Tools
 ```
 
-## Adding More Tools
+## Adding More Models
 
-1. Create tool file: `src/mcp-server/tools/your-tool.js`
-2. Add to `src/mcp-server/index.js` in `tools/list`
-3. Add execution in `tools/call`
+Just add to `src/config/ai-clients.js`:
+```javascript
+export const models = {
+  // ... existing models
+  
+  'claude-opus': {
+    id: 'anthropic/claude-opus-4-20250514',
+    name: 'Claude Opus 4',
+    strengths: 'Most powerful reasoning',
+    cost: '$$$$',
+    provider: 'openrouter'
+  }
+};
+```
 
-All three AI models will automatically have access to the new tool!
+## Cost Tracking
+
+Every response includes token usage:
+```json
+{
+  "usage": {
+    "prompt_tokens": 150,
+    "completion_tokens": 50,
+    "total_tokens": 200
+  }
+}
+```
+
+Monitor your usage at: https://openrouter.ai/activity

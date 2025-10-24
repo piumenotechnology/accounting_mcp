@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import chatRoutes from './routes/chat.routes.js';
+import apiRouter from './routes/index.js';
 
 dotenv.config();
 
@@ -12,8 +12,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.send('Welcome to the Accounting AI API');
+});
+
 // Routes
-app.use('/api', chatRoutes);
+app.use('/api/v1', apiRouter);
 
 // Health check
 app.get('/health', (req, res) => {

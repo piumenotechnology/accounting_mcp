@@ -1,30 +1,48 @@
-import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Claude client
-export const claudeClient = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// Single OpenRouter client for all models
+export const openRouterClient = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    'HTTP-Referer': process.env.OPENROUTER_APP_URL || 'http://localhost:3000',
+    'X-Title': process.env.OPENROUTER_APP_NAME || 'MCP Backend',
+  }
 });
 
-// OpenAI client
-export const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Gemini client
-export const geminiClient = new GoogleGenerativeAI(
-  process.env.GOOGLE_API_KEY
-);
-
-// Check which clients are available
-export const availableClients = {
-  claude: !!process.env.ANTHROPIC_API_KEY,
-  openai: !!process.env.OPENAI_API_KEY,
-  gemini: !!process.env.GOOGLE_API_KEY
+// Model configurations
+export const models = {
+  claude: {
+    id: 'anthropic/claude-sonnet-4-5-20250929',
+    name: 'Claude Sonnet 4.5',
+    strengths: 'Complex reasoning, analysis, coding',
+    cost: '$$$',
+    provider: 'openrouter'
+  },
+  openai: {
+    id: 'openai/gpt-4o-mini',
+    name: 'GPT-4 Turbo',
+    strengths: 'Creative writing, general conversation',
+    cost: '$$',
+    provider: 'openrouter'
+  },
+  gemini: {
+    id: 'google/gemini-2.0-flash-exp:free',
+    name: 'Gemini 2.0 Flash',
+    strengths: 'Quick tasks, cost-effective (FREE)',
+    cost: 'FREE',
+    provider: 'openrouter'
+  },
 };
 
-console.log('🤖 Available AI clients:', availableClients);
+// Check if OpenRouter is configured
+export const isConfigured = !!process.env.OPENROUTER_API_KEY;
+
+if (!isConfigured) {
+  console.warn('⚠️  OPENROUTER_API_KEY not configured!');
+} else {
+  console.log('✅ OpenRouter configured with models:', Object.keys(models).join(', '));
+}
