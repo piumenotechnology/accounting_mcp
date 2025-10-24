@@ -33,8 +33,13 @@ export const auth = {
         try {
           const ticket = await client.verifyIdToken({ idToken, audience: aud });
           payload = ticket.getPayload();
+
+          console.log(payload);
+
           break;
-        } catch (_) {}
+        } catch (_) {
+          console.log("error tisckets");
+        }
       }
       
       if (!payload) {
@@ -50,7 +55,7 @@ export const auth = {
         return res.status(401).json({ error: 'Email not verified' });
       }
 
-      const user = await authModels.googleLoginUser({
+      const user = await authModels.userGoogle({
         google_id: sub,
         email,
         name,
@@ -63,15 +68,18 @@ export const auth = {
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
       const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+
+      console.log(cekGoogleConnectedValid);
       
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
         token,
         refreshToken,
-        referral,
-        scopes: tableScope,
+        // referral,
+        // scopes: tableScope,
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
+
     } catch (error) {
       console.error('Google Auth Error');
       res.status(401).json({ error: 'Invalid Google token' });
