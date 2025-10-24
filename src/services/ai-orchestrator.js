@@ -9,9 +9,13 @@ class AIOrchestrator {
     this.client = openRouterClient;
   }
   
-  async processMessage(message, requestedModel = null) {
+  async processMessage(message, user_id, requestedModel = null) {
     if (!isConfigured) {
       throw new Error('OpenRouter API key not configured');
+    }
+    
+    if (!user_id) {
+      throw new Error('user_id is required');
     }
     
     // Step 1: Determine which model to use
@@ -23,7 +27,7 @@ class AIOrchestrator {
     }
     
     console.log(`🎯 Selected model: ${modelConfig.name} (${modelConfig.id})`);
-    console.log(`   Strengths: ${modelConfig.strengths} | Cost: ${modelConfig.cost}`);
+    console.log(`   User: ${user_id}`);
     
     // Step 2: Get MCP tools
     await this.mcpClient.connect();
@@ -31,7 +35,7 @@ class AIOrchestrator {
     
     console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
     
-    // Step 3: Convert MCP tools to OpenAI format (works for all models via OpenRouter)
+    // Step 3: Convert MCP tools to OpenAI format
     const tools = mcpTools.tools.map(tool => ({
       type: 'function',
       function: {
@@ -41,11 +45,11 @@ class AIOrchestrator {
       }
     }));
     
-    // Step 4: Process with OpenRouter (unified for all models)
-    return await this.processWithOpenRouter(message, modelConfig.id, tools);
+    // Step 4: Process with OpenRouter
+    return await this.processWithOpenRouter(message, user_id, modelConfig.id, tools);
   }
   
-  async processWithOpenRouter(message, modelId, tools) {
+  async processWithOpenRouter(message, user_id, modelId, tools) {
     let messages = [{ role: 'user', content: message }];
     let toolsCalled = [];
     let maxIterations = 5;
@@ -81,6 +85,19 @@ class AIOrchestrator {
         toolsCalled.push(toolCall.function.name);
         
         const functionArgs = JSON.parse(toolCall.function.arguments);
+        
+        // ⭐ INJECT USER_ID for calendar tools
+        const toolsRequiringUserId = [
+          'create_calendar_event',
+          'list_calendar_events', 
+          'update_calendar_event',
+          'delete_calendar_event',
+          'check_google_connection'
+        ];
+        
+        if (toolsRequiringUserId.includes(toolCall.function.name)) {
+          functionArgs.user_id = user_id;
+        }
         
         // Execute tool via MCP
         const toolResult = await this.mcpClient.callTool({

@@ -11,7 +11,7 @@ import {
 import { tokenModel } from '../models/token.model.js';
 import { getTokens, deleteTokens } from '../models/google.model.js';
 // import { referralModels } from '../models/referral.models.js';
-import { isGoogleStillConnected } from '../services/google-token.js';
+import { isGoogleStillConnected } from '../services/google-connection.js';
 import { upsertTokens } from '../models/google.model.js';
 
 dotenv.config();
@@ -59,14 +59,16 @@ export const auth = {
         picture
       });
       
+      //for user
       const token = generateToken(user); 
       const refreshToken = generateRefreshToken();
       await tokenModel.createRefreshToken(user.id, refreshToken, 30);
+
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
       const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
 
-      console.log(cekGoogleConnectedValid);
+      // console.log(cekGoogleConnectedValid);
       
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
@@ -169,6 +171,8 @@ export const auth = {
 
       // 2️⃣ Get Google tokens
       const tokens = await getTokens(userId);
+
+      console.log(tokens);
 
       // 3️⃣ Only revoke if there is an access_token but NOT a refresh_token
       if (tokens && tokens.access_token && !tokens.refresh_token) {

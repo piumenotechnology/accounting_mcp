@@ -1,12 +1,14 @@
 import express from 'express';
 import AIOrchestrator from '../services/ai-orchestrator.js';
 import { models } from '../config/ai-clients.js';
+import {requireAuth} from '../middlewares/auth.js';
 
 const router = express.Router();
 const aiOrchestrator = new AIOrchestrator();
 
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { message, model } = req.body;
+  const user_id = req.user.id;
   
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
@@ -18,7 +20,7 @@ router.post('/', async (req, res) => {
       console.log('🎯 Requested specific model:', model);
     }
     
-    const response = await aiOrchestrator.processMessage(message, model);
+    const response = await aiOrchestrator.processMessage(message, user_id, model);
     
     console.log('✅ Response completed');
     
