@@ -10,7 +10,11 @@ export class ModelSelector {
       
       // Fast, simple tasks
       if (this.isSimpleTask(lowercaseMsg)) {
-        return 'gpt-3.5-turbo';
+        return 'gpt-4.1-mini';
+      }
+
+      if (this.isSimpleTask(lowercaseMsg)) {
+        return 'gpt-5-mini';
       }
       
       // Default: balanced model

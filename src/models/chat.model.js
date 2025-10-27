@@ -90,8 +90,6 @@ class ConversationManager {
    */
   async getOrCreateConversation(conversationId, userId) {
     const client = await pool.connect();
-
-    console.log('insert data into db');
     try {
       // Try to get existing conversation
       let result = await client.query(

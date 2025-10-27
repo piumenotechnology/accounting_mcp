@@ -25,16 +25,16 @@ export const openaiModels = {
     cost: 'Low',
     maxTokens: 128000
   },
-  'gpt-4-turbo': {
-    id: 'gpt-4-turbo-preview',
-    name: 'GPT-4 Turbo',
+  'gpt-5-mini': {
+    id: 'gpt-5-mini',
+    name: 'GPT-5 Mini',
     strengths: 'High capability, good balance',
     cost: 'Medium',
     maxTokens: 128000
   },
-  'gpt-3.5-turbo': {
-    id: 'gpt-3.5-turbo',
-    name: 'GPT-3.5 Turbo',
+  'gpt-4.1-mini': {
+    id: 'gpt-4.1-mini',
+    name: 'GPT-4.1 Turbo',
     strengths: 'Fast and cheap for simple tasks',
     cost: 'Very Low',
     maxTokens: 16385

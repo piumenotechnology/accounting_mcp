@@ -46,41 +46,4 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get conversation history
-router.get('/conversation/:user_id/:conversation_id?', (req, res) => {
-  const { user_id, conversation_id = 'default' } = req.params;
-  
-  const orchestrator = new AIOrchestrator();
-  const history = orchestrator.getConversationHistory(user_id, conversation_id);
-  
-  res.json({
-    success: true,
-    conversation_id,
-    history
-  });
-});
-
-// Clear conversation
-router.delete('/conversation/:user_id/:conversation_id?', (req, res) => {
-  const { user_id, conversation_id = 'default' } = req.params;
-  
-  const orchestrator = new AIOrchestrator();
-  orchestrator.clearConversation(user_id, conversation_id);
-  
-  res.json({
-    success: true,
-    message: 'Conversation cleared'
-  });
-});
-
-// Get available models
-router.get('/models', (req, res) => {
-  const { openaiModels, openRouterModels, isOpenAIConfigured, isOpenRouterConfigured } = require('../config/ai-clients.js');
-  
-  res.json({
-    openai: isOpenAIConfigured ? openaiModels : null,
-    openrouter: isOpenRouterConfigured ? openRouterModels : null
-  });
-});
-
 export default router;
