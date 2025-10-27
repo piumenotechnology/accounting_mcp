@@ -24,7 +24,7 @@ const server = new Server({
   }
 });
 
-// Define all tools
+// Define all tools - DON'T include user_id in schema (we inject it)
 const TOOLS = [
   {
     name: 'count',
@@ -51,16 +51,10 @@ const TOOLS = [
   },
   {
     name: 'check_google_connection',
-    description: 'Check if Google Calendar is connected and working for the user.',
+    description: 'Check if Google Calendar is connected and working.',
     inputSchema: {
       type: 'object',
-      properties: {
-        user_id: { 
-          type: 'string', 
-          description: 'User ID to check connection for' 
-        }
-      },
-      required: ['user_id']
+      properties: {}
     }
   },
   {
@@ -69,19 +63,15 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        user_id: { 
-          type: 'string', 
-          description: 'User ID for authentication' 
-        },
         summary: { type: 'string', description: 'Event title/summary' },
         description: { type: 'string', description: 'Event description (optional)' },
         startDateTime: { 
           type: 'string', 
-          description: 'Start date and time in ISO 8601 format (e.g., 2025-10-25T10:00:00)' 
+          description: 'Start date and time in ISO 8601 format (e.g., 2025-10-27T14:00:00)' 
         },
         endDateTime: { 
           type: 'string', 
-          description: 'End date and time in ISO 8601 format (e.g., 2025-10-25T11:00:00)' 
+          description: 'End date and time in ISO 8601 format (e.g., 2025-10-27T15:00:00)' 
         },
         timeZone: { 
           type: 'string', 
@@ -94,7 +84,7 @@ const TOOLS = [
           description: 'Array of attendee email addresses (optional)'
         }
       },
-      required: ['user_id', 'summary', 'startDateTime', 'endDateTime']
+      required: ['summary', 'startDateTime', 'endDateTime']
     }
   },
   {
@@ -103,10 +93,6 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        user_id: { 
-          type: 'string', 
-          description: 'User ID for authentication' 
-        },
         maxResults: { 
           type: 'number', 
           description: 'Maximum number of events to return',
@@ -116,8 +102,7 @@ const TOOLS = [
           type: 'string', 
           description: 'Lower bound for event start time (ISO 8601 format)'
         }
-      },
-      required: ['user_id']
+      }
     }
   },
   {
@@ -126,10 +111,6 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        user_id: { 
-          type: 'string', 
-          description: 'User ID for authentication' 
-        },
         eventId: { type: 'string', description: 'Event ID to update' },
         summary: { type: 'string', description: 'New event title/summary' },
         description: { type: 'string', description: 'New event description' },
@@ -138,7 +119,7 @@ const TOOLS = [
         timeZone: { type: 'string', default: 'Asia/Makassar' },
         attendees: { type: 'array', items: { type: 'string' } }
       },
-      required: ['user_id', 'eventId']
+      required: ['eventId']
     }
   },
   {
@@ -147,13 +128,9 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        user_id: { 
-          type: 'string', 
-          description: 'User ID for authentication' 
-        },
         eventId: { type: 'string', description: 'Event ID to delete' }
       },
-      required: ['user_id', 'eventId']
+      required: ['eventId']
     }
   }
 ];

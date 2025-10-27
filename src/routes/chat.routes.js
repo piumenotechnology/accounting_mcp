@@ -3,9 +3,16 @@ import AIOrchestrator from '../services/ai-orchestrator.js';
 
 const router = express.Router();
 
+// Chat endpoint with conversation memory
 router.post('/', async (req, res) => {
   try {
-    const { message, user_id, model, provider = 'openai' } = req.body;
+    const { 
+      message, 
+      user_id, 
+      model, 
+      provider = 'openai',
+      conversation_id = 'default'  // Add conversation ID support
+    } = req.body;
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -20,8 +27,9 @@ router.post('/', async (req, res) => {
     const result = await orchestrator.processMessage(
       message, 
       user_id, 
-      model,      // optional: 'gpt-4o', 'gpt-4o-mini', etc.
-      provider    // 'openai' or 'openrouter'
+      model,
+      provider,
+      conversation_id  // Pass conversation ID
     );
     
     res.json({
@@ -38,9 +46,36 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Get conversation history
+router.get('/conversation/:user_id/:conversation_id?', (req, res) => {
+  const { user_id, conversation_id = 'default' } = req.params;
+  
+  const orchestrator = new AIOrchestrator();
+  const history = orchestrator.getConversationHistory(user_id, conversation_id);
+  
+  res.json({
+    success: true,
+    conversation_id,
+    history
+  });
+});
+
+// Clear conversation
+router.delete('/conversation/:user_id/:conversation_id?', (req, res) => {
+  const { user_id, conversation_id = 'default' } = req.params;
+  
+  const orchestrator = new AIOrchestrator();
+  orchestrator.clearConversation(user_id, conversation_id);
+  
+  res.json({
+    success: true,
+    message: 'Conversation cleared'
+  });
+});
+
 // Get available models
 router.get('/models', (req, res) => {
-  const { openaiModels, openRouterModels } = require('../config/ai-clients.js');
+  const { openaiModels, openRouterModels, isOpenAIConfigured, isOpenRouterConfigured } = require('../config/ai-clients.js');
   
   res.json({
     openai: isOpenAIConfigured ? openaiModels : null,
