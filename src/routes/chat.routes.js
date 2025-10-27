@@ -7,7 +7,7 @@ const router = express.Router();
 const aiOrchestrator = new AIOrchestrator();
 
 router.post('/', requireAuth, async (req, res) => {
-  const { message, model } = req.body;
+  const { message, model, chat_id } = req.body;
   const user_id = req.user.id;
   
   if (!message) {
