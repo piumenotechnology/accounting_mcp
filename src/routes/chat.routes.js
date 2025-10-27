@@ -1,55 +1,50 @@
 import express from 'express';
 import AIOrchestrator from '../services/ai-orchestrator.js';
-import { models } from '../config/ai-clients.js';
-import {requireAuth} from '../middlewares/auth.js';
 
 const router = express.Router();
-const aiOrchestrator = new AIOrchestrator();
 
-router.post('/', requireAuth, async (req, res) => {
-  const { message, model, chat_id } = req.body;
-  const user_id = req.user.id;
-  
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-  
+router.post('/', async (req, res) => {
   try {
-    console.log('📨 Received message:', message);
-    if (model) {
-      console.log('🎯 Requested specific model:', model);
+    const { message, user_id, model, provider = 'openai' } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
     }
     
-    const response = await aiOrchestrator.processMessage(message, user_id, model);
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
     
-    console.log('✅ Response completed');
+    const orchestrator = new AIOrchestrator();
+    
+    const result = await orchestrator.processMessage(
+      message, 
+      user_id, 
+      model,      // optional: 'gpt-4o', 'gpt-4o-mini', etc.
+      provider    // 'openai' or 'openrouter'
+    );
     
     res.json({
-      message: response.message,
-      toolsCalled: response.toolsCalled,
-      model: response.model,
-      usage: response.usage
+      success: true,
+      data: result
     });
     
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ AI processing error:', error);
     res.status(500).json({ 
-      error: 'Failed to process message',
-      details: error.message 
+      success: false,
+      error: error.message 
     });
   }
 });
 
 // Get available models
 router.get('/models', (req, res) => {
+  const { openaiModels, openRouterModels } = require('../config/ai-clients.js');
+  
   res.json({
-    models: Object.entries(models).map(([key, config]) => ({
-      id: key,
-      name: config.name,
-      modelId: config.id,
-      strengths: config.strengths,
-      cost: config.cost
-    }))
+    openai: isOpenAIConfigured ? openaiModels : null,
+    openrouter: isOpenRouterConfigured ? openRouterModels : null
   });
 });
 

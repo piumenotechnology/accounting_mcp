@@ -1,48 +1,74 @@
 import OpenAI from 'openai';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// OpenAI Configuration
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Single OpenRouter client for all models
-export const openRouterClient = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': process.env.OPENROUTER_APP_URL || 'http://localhost:3000',
-    'X-Title': process.env.OPENROUTER_APP_NAME || 'MCP Backend',
-  }
+export const openaiClient = new OpenAI({
+  apiKey: OPENAI_API_KEY
 });
 
-// Model configurations
-export const models = {
-  claude: {
-    id: 'anthropic/claude-sonnet-4-5-20250929',
-    name: 'Claude Sonnet 4.5',
-    strengths: 'Complex reasoning, analysis, coding',
-    cost: '$$$',
-    provider: 'openrouter'
+export const isOpenAIConfigured = !!OPENAI_API_KEY;
+
+// OpenAI Models
+export const openaiModels = {
+  'gpt-4o': {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    strengths: 'Most capable, best reasoning',
+    cost: 'High',
+    maxTokens: 128000
   },
-  openai: {
-    id: 'openai/gpt-4o-mini',
+  'gpt-4o-mini': {
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
+    strengths: 'Fast and affordable',
+    cost: 'Low',
+    maxTokens: 128000
+  },
+  'gpt-4-turbo': {
+    id: 'gpt-4-turbo-preview',
     name: 'GPT-4 Turbo',
-    strengths: 'Creative writing, general conversation',
-    cost: '$$',
-    provider: 'openrouter'
+    strengths: 'High capability, good balance',
+    cost: 'Medium',
+    maxTokens: 128000
   },
-  gemini: {
-    id: 'google/gemini-2.0-flash-exp:free',
-    name: 'Gemini 2.0 Flash',
-    strengths: 'Quick tasks, cost-effective (FREE)',
-    cost: 'FREE',
-    provider: 'openrouter'
-  },
+  'gpt-3.5-turbo': {
+    id: 'gpt-3.5-turbo',
+    name: 'GPT-3.5 Turbo',
+    strengths: 'Fast and cheap for simple tasks',
+    cost: 'Very Low',
+    maxTokens: 16385
+  }
 };
 
-// Check if OpenRouter is configured
-export const isConfigured = !!process.env.OPENROUTER_API_KEY;
+// OpenRouter Configuration (optional fallback)
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-if (!isConfigured) {
-  console.warn('⚠️  OPENROUTER_API_KEY not configured!');
-} else {
-  console.log('✅ OpenRouter configured with models:', Object.keys(models).join(', '));
-}
+export const openRouterClient = OPENROUTER_API_KEY ? new OpenAI({
+  apiKey: OPENROUTER_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1'
+}) : null;
+
+export const isOpenRouterConfigured = !!OPENROUTER_API_KEY;
+
+// OpenRouter Models
+export const openRouterModels = {
+  'claude-sonnet-4': {
+    id: 'anthropic/claude-sonnet-4',
+    name: 'Claude Sonnet 4',
+    strengths: 'Excellent reasoning, long context',
+    cost: 'High'
+  },
+  'claude-3.5-sonnet': {
+    id: 'anthropic/claude-3.5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    strengths: 'Great balance of speed and capability',
+    cost: 'Medium'
+  },
+  'gemini-2-flash': {
+    id: 'google/gemini-2.0-flash-exp:free',
+    name: 'Gemini 2.0 Flash',
+    strengths: 'Very fast, free tier available',
+    cost: 'Free/Low'
+  }
+};
