@@ -59,16 +59,27 @@ export const openRouterModels = {
     strengths: 'Excellent reasoning, long context',
     cost: 'High'
   },
-  'claude-3.5-sonnet': {
-    id: 'anthropic/claude-3.5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    strengths: 'Great balance of speed and capability',
-    cost: 'Medium'
-  },
-  'gemini-2-flash': {
-    id: 'google/gemini-2.0-flash-exp:free',
+  // openai: {
+  //   id: 'openai/gpt-4o-mini',
+  //   name: 'GPT-4o Mini',
+  //   strengths: 'Creative writing, general conversation',
+  //   cost: '$$',
+  //   provider: 'openrouter'
+  // },
+  gemini: {
+    id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.0 Flash',
-    strengths: 'Very fast, free tier available',
-    cost: 'Free/Low'
-  }
+    strengths: 'Quick tasks, cost-effective (FREE)',
+    cost: 'FREE',
+    provider: 'openrouter'
+  },
 };
+
+// Check if OpenRouter is configured
+export const isConfigured = !!process.env.OPENROUTER_API_KEY;
+
+if (!isConfigured) {
+  console.warn('⚠️  OPENROUTER_API_KEY not configured!');
+} else {
+  console.log('✅ OpenRouter configured with models:', Object.keys(models).join(', '));
+}
