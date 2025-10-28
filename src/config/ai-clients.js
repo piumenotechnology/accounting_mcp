@@ -16,7 +16,7 @@ export const openRouterClient = new OpenAI({
 // Model configurations
 export const models = {
   claude: {
-    id: 'anthropic/claude-sonnet-4-5-20250929',
+    id: 'anthropic/claude-sonnet-4.5',
     name: 'Claude Sonnet 4.5',
     strengths: 'Complex reasoning, analysis, coding',
     cost: '$$$',
