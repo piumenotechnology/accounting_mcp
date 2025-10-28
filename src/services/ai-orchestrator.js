@@ -1,5 +1,6 @@
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
+import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
 import MCPClient from './mcp-client.js';
 
 class AIOrchestrator {
@@ -61,14 +62,78 @@ class AIOrchestrator {
   }
   
   async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null) {
+    
+    // const now = new Date();
+    // const dateInfo = {
+    //   iso: now.toISOString(),
+    //   date: now.toLocaleDateString('en-US', { 
+    //     weekday: 'long', 
+    //     year: 'numeric', 
+    //     month: 'long', 
+    //     day: 'numeric' 
+    //   }),
+    //   time: now.toLocaleTimeString('en-US', { 
+    //     hour: '2-digit', 
+    //     minute: '2-digit',
+    //     hour12: true 
+    //   }),
+    //   timezone: 'Asia/Makassar', // Default, can be dynamic
+    //   dayOfWeek: now.toLocaleDateString('en-US', { weekday: 'long' })
+    // };
+
+    //  const systemMessage = {
+    //       role: 'system',
+    //       content: `Current date and time information:
+    //   - Date: ${dateInfo.date}
+    //   - Time: ${dateInfo.time}
+    //   - Timezone: ${dateInfo.timezone}
+    //   - ISO format: ${dateInfo.iso}
+
+    //   When user mentions relative times:
+    //   - "today" = ${dateInfo.date}
+    //   - "tomorrow" = calculate from today
+    //   - "next week" = calculate from today
+    //   - Always use ISO 8601 format for calendar events
+
+    //   ${user_location ? `User location: ${user_location.lat}, ${user_location.lng}` : ''}`
+    // };
+
+    let timezone = 'Asia/Makassar'; // Default
+    let locationInfo = '';
+    
+    if (user_location && user_location.lat && user_location.lng) {
+      timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
+      locationInfo = `User coordinates: ${user_location.lat}, ${user_location.lng}`;
+    }
+
+    // Get current time in user's timezone
+    const timeInfo = getCurrentTimeInTimezone(timezone);
+
+    const systemMessage = {
+    role: 'system',
+    content: `Current date and time information:
+      - Date: ${timeInfo.localDate}
+      - Time: ${timeInfo.localTime}
+      - Timezone: ${timezone}
+      - ISO format: ${timeInfo.iso}
+      ${locationInfo}
+
+      Important for calendar events:
+      - Always use timezone: ${timezone}
+      - Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
+      - When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
+
+      When user mentions relative times, calculate from the current date/time above.`
+    };
+    
     // Build messages array with history
     let messages;
     
     if (conversationHistory.length > 0) {
-      messages = [...conversationHistory];
+      messages = [systemMessage, ...conversationHistory];
       console.log(`📚 Using ${messages.length} messages from history`);
     } else {
-      messages = [{ role: 'user', content: message }];
+      messages = [systemMessage, { role: 'user', content: message }];
       console.log('✨ Starting new conversation');
     }
     

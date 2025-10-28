@@ -4,18 +4,66 @@ import {withAutoRetry, isGoogleStillConnected } from '../../services/google-conn
 /**
  * Create a Google Calendar event
  */
+// export async function createCalendarEventTool({ 
+//   userId,
+//   summary, 
+//   description = '', 
+//   startDateTime, 
+//   endDateTime,
+//   timeZone = 'Asia/Makassar',
+//   attendees = []
+// }) {
+//   try {
+//     return await withAutoRetry(userId, async (auth) => {
+//       const calendar = google.calendar({ version: 'v3', auth });
+
+//       const event = {
+//         summary,
+//         description,
+//         start: { dateTime: startDateTime, timeZone },
+//         end: { dateTime: endDateTime, timeZone },
+//         attendees: attendees.map(email => ({ email })),
+//         reminders: { useDefault: true }
+//       };
+
+//       const response = await calendar.events.insert({
+//         calendarId: 'primary',
+//         resource: event,
+//         sendUpdates: 'all'
+//       });
+
+//       return {
+//         success: true,
+//         eventId: response.data.id,
+//         htmlLink: response.data.htmlLink,
+//         summary: response.data.summary,
+//         start: response.data.start.dateTime,
+//         end: response.data.end.dateTime,
+//         message: `Event "${summary}" created successfully!`
+//       };
+//     });
+//   } catch (error) {
+//     if (error.code === 'NOT_CONNECTED' || error.code === 'NO_REFRESH' || error.code === 'REFRESH_FAILED') {
+//       throw new Error(`Google Calendar not connected: ${error.message}`);
+//     }
+//     throw new Error(`Calendar API error: ${error.message}`);
+//   }
+// }
+
 export async function createCalendarEventTool({ 
   userId,
   summary, 
   description = '', 
   startDateTime, 
   endDateTime,
-  timeZone = 'Asia/Makassar',
+  timeZone = 'Asia/Makassar', // This will now come from AI
   attendees = []
 }) {
   try {
     return await withAutoRetry(userId, async (auth) => {
       const calendar = google.calendar({ version: 'v3', auth });
+
+      console.log(`📅 Creating calendar event in timezone: ${timeZone}`);
 
       const event = {
         summary,
@@ -39,7 +87,8 @@ export async function createCalendarEventTool({
         summary: response.data.summary,
         start: response.data.start.dateTime,
         end: response.data.end.dateTime,
-        message: `Event "${summary}" created successfully!`
+        timezone: timeZone,
+        message: `Event "${summary}" created successfully in ${timeZone}!`
       };
     });
   } catch (error) {

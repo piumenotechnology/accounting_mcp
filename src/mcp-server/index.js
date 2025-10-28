@@ -59,9 +59,39 @@ const TOOLS = [
       properties: {}
     }
   },
-  {
+  // {
+  //   name: 'create_calendar_event',
+  //   description: 'Create a new event in Google Calendar.',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       summary: { type: 'string', description: 'Event title/summary' },
+  //       description: { type: 'string', description: 'Event description (optional)' },
+  //       startDateTime: { 
+  //         type: 'string', 
+  //         description: 'Start date and time in ISO 8601 format (e.g., 2025-10-27T14:00:00)' 
+  //       },
+  //       endDateTime: { 
+  //         type: 'string', 
+  //         description: 'End date and time in ISO 8601 format (e.g., 2025-10-27T15:00:00)' 
+  //       },
+  //       timeZone: { 
+  //         type: 'string', 
+  //         description: 'Time zone (e.g., Asia/Makassar, America/New_York)',
+  //         default: 'Asia/Makassar'
+  //       },
+  //       attendees: {
+  //         type: 'array',
+  //         items: { type: 'string' },
+  //         description: 'Array of attendee email addresses (optional)'
+  //       }
+  //     },
+  //     required: ['summary', 'startDateTime', 'endDateTime']
+  //   }
+  // },
+    {
     name: 'create_calendar_event',
-    description: 'Create a new event in Google Calendar.',
+    description: 'Create a new event in Google Calendar. Use the user\'s detected timezone from the system message.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -69,15 +99,15 @@ const TOOLS = [
         description: { type: 'string', description: 'Event description (optional)' },
         startDateTime: { 
           type: 'string', 
-          description: 'Start date and time in ISO 8601 format (e.g., 2025-10-27T14:00:00)' 
+          description: 'Start date and time in ISO 8601 format (e.g., 2025-10-29T14:00:00)' 
         },
         endDateTime: { 
           type: 'string', 
-          description: 'End date and time in ISO 8601 format (e.g., 2025-10-27T15:00:00)' 
+          description: 'End date and time in ISO 8601 format (e.g., 2025-10-29T15:00:00)' 
         },
         timeZone: { 
           type: 'string', 
-          description: 'Time zone (e.g., Asia/Makassar, America/New_York)',
+          description: 'Timezone (use the timezone from system message)',
           default: 'Asia/Makassar'
         },
         attendees: {
