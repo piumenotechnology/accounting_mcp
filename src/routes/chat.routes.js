@@ -6,9 +6,9 @@ import {requireAuth} from '../middlewares/auth.js';
 const router = express.Router();
 const aiOrchestrator = new AIOrchestrator();
 
-router.post('/', requireAuth, async (req, res) => {
-  const { message, model, chat_id } = req.body;
-  const user_id = req.user.id;
+router.post('/', async (req, res) => {
+  const { message, model, user_id, chat_id } = req.body;
+  // const user_id = req.user.id;
   
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });

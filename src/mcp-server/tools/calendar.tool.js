@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { getGoogleClientForUser, withAutoRetry, isGoogleStillConnected } from '../../services/google-auth.js'; // Adjust path to your auth file
+import {withAutoRetry, isGoogleStillConnected } from '../../services/google-connection.js'; // Adjust path to your auth file
 
 /**
  * Create a Google Calendar event

@@ -22,17 +22,17 @@ export const models = {
     cost: '$$$',
     provider: 'openrouter'
   },
-  openai: {
-    id: 'openai/gpt-4o-mini',
-    name: 'GPT-4 Turbo',
-    strengths: 'Creative writing, general conversation',
-    cost: '$$',
-    provider: 'openrouter'
-  },
+  // openai: {
+  //   id: 'openai/gpt-4o-mini',
+  //   name: 'GPT-4o Mini',
+  //   strengths: 'Creative writing, general conversation',
+  //   cost: '$$',
+  //   provider: 'openrouter'
+  // },
   gemini: {
-    id: 'google/gemini-2.0-flash-exp:free',
+    id: 'google/gemini-2.5-flash',
     name: 'Gemini 2.0 Flash',
-    strengths: 'Quick tasks, cost-effective (FREE)',
+    strengths: 'Quick tasks',
     cost: 'FREE',
     provider: 'openrouter'
   },
