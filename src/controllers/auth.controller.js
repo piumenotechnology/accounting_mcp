@@ -79,6 +79,9 @@ export const auth = {
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 
+      console.log(`User ${user.email} logged in via Google.`);
+      console.log('googleConnected', googleConnected);
+
     } catch (error) {
       console.error('Google Auth Error');
       res.status(401).json({ error: 'Invalid Google token' });
