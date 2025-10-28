@@ -14,6 +14,7 @@ import {
   checkGoogleConnectionTool
 } from './tools/calendar.tool.js';
 import { searchContactTool } from './tools/contact.tool.js';
+import { sendEmailTool } from './tools/email.tool.js';
 
 // Create MCP server
 const server = new Server({
@@ -64,6 +65,48 @@ const TOOLS = [
         }
       },
       required: ['name']
+    }
+  },
+  {
+    name: 'send_email',
+    description: 'Send an email via Gmail. Use search_contact tool first to find recipient email addresses by name. Emails are sent immediately.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Recipient email addresses. Use search_contact first if you only have names.'
+        },
+        subject: {
+          type: 'string',
+          description: 'Email subject line'
+        },
+        body: {
+          type: 'string',
+          description: 'Email body content. Write professional, clear, and context-appropriate content.'
+        },
+        cc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'CC recipient email addresses (optional)'
+        },
+        bcc: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'BCC recipient email addresses (optional)'
+        },
+        html: {
+          type: 'boolean',
+          description: 'Whether body content is HTML formatted (optional, default: false)',
+          default: false
+        },
+        replyTo: {
+          type: 'string',
+          description: 'Gmail message ID to reply to for threading (optional)'
+        }
+      },
+      required: ['to', 'subject', 'body']
     }
   },
   {
@@ -191,6 +234,28 @@ const toolHandlers = {
     const result = await searchContactTool({ 
       userId: user_id, 
       name 
+    });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  send_email: async (args) => {
+    const { user_id, to, subject, body, cc, bcc, html, replyTo } = args;
+    console.error(`⚡ MCP: Sending email for user: ${user_id}`);
+    console.error(`   To: ${to?.join(', ')}`);
+    console.error(`   Subject: ${subject}`);
+    
+    const result = await sendEmailTool({
+      userId: user_id,
+      to,
+      subject,
+      body,
+      cc,
+      bcc,
+      html,
+      replyTo
     });
     
     return {

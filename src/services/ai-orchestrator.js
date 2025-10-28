@@ -78,21 +78,25 @@ class AIOrchestrator {
     const systemMessage = {
       role: 'system',
       content: `Current date and time information:
-                - Date: ${timeInfo.localDate}
-                - Time: ${timeInfo.localTime}
-                - Timezone: ${timezone}
-                - ISO format: ${timeInfo.iso}${locationInfo}
+- Date: ${timeInfo.localDate}
+- Time: ${timeInfo.localTime}
+- Timezone: ${timezone}
+- ISO format: ${timeInfo.iso}${locationInfo}
 
-                Important for calendar events:
-                - Always use timezone: ${timezone}
-                - Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
-                - When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
+Important for calendar events:
+- Always use timezone: ${timezone}
+- Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
+- When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
 
-                When user mentions relative times, calculate from the current date/time above.
+When user mentions relative times, calculate from the current date/time above.
 
-                When user mentions a person's name for calendar events or emails:
-                - Use the search_contact tool to find their email address
-                - Wait for the contact search result before creating events`
+Contact and Email Guidelines:
+- When user mentions a person's name for calendar events or emails, use the search_contact tool to find their email address
+- Wait for the contact search result before creating events or sending emails
+- For emails: write professional, clear, and context-appropriate content
+- Adjust tone based on context (formal for business, casual for team/friends)
+- Emails are sent immediately - ensure content is accurate and appropriate
+- Always include proper greeting and closing in emails`
     };
 
     // Build messages array with history
@@ -150,7 +154,8 @@ class AIOrchestrator {
           'update_calendar_event',
           'delete_calendar_event',
           'check_google_connection',
-          'search_contact'
+          'search_contact',
+          'send_email' 
         ];
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
