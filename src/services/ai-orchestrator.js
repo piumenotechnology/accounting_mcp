@@ -1,7 +1,7 @@
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
-import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
 import MCPClient from './mcp-client.js';
+import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
 
 class AIOrchestrator {
   constructor() {
@@ -57,82 +57,53 @@ class AIOrchestrator {
       modelConfig.id, 
       tools, 
       conversationHistory,
-      user_location // ⭐ Pass location
+      user_location
     );
   }
   
   async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null) {
-    
-    // const now = new Date();
-    // const dateInfo = {
-    //   iso: now.toISOString(),
-    //   date: now.toLocaleDateString('en-US', { 
-    //     weekday: 'long', 
-    //     year: 'numeric', 
-    //     month: 'long', 
-    //     day: 'numeric' 
-    //   }),
-    //   time: now.toLocaleTimeString('en-US', { 
-    //     hour: '2-digit', 
-    //     minute: '2-digit',
-    //     hour12: true 
-    //   }),
-    //   timezone: 'Asia/Makassar', // Default, can be dynamic
-    //   dayOfWeek: now.toLocaleDateString('en-US', { weekday: 'long' })
-    // };
-
-    //  const systemMessage = {
-    //       role: 'system',
-    //       content: `Current date and time information:
-    //   - Date: ${dateInfo.date}
-    //   - Time: ${dateInfo.time}
-    //   - Timezone: ${dateInfo.timezone}
-    //   - ISO format: ${dateInfo.iso}
-
-    //   When user mentions relative times:
-    //   - "today" = ${dateInfo.date}
-    //   - "tomorrow" = calculate from today
-    //   - "next week" = calculate from today
-    //   - Always use ISO 8601 format for calendar events
-
-    //   ${user_location ? `User location: ${user_location.lat}, ${user_location.lng}` : ''}`
-    // };
-
+    // Detect timezone from user location
     let timezone = 'Asia/Makassar'; // Default
     let locationInfo = '';
     
     if (user_location && user_location.lat && user_location.lng) {
       timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
-      locationInfo = `User coordinates: ${user_location.lat}, ${user_location.lng}`;
+      locationInfo = `\nUser coordinates: ${user_location.lat}, ${user_location.lng}`;
     }
 
     // Get current time in user's timezone
     const timeInfo = getCurrentTimeInTimezone(timezone);
-
-    const systemMessage = {
-    role: 'system',
-    content: `Current date and time information:
-      - Date: ${timeInfo.localDate}
-      - Time: ${timeInfo.localTime}
-      - Timezone: ${timezone}
-      - ISO format: ${timeInfo.iso}
-      ${locationInfo}
-
-      Important for calendar events:
-      - Always use timezone: ${timezone}
-      - Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
-      - When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
-
-      When user mentions relative times, calculate from the current date/time above.`
-    };
     
+    // Build system message with timezone-aware info
+    const systemMessage = {
+      role: 'system',
+      content: `Current date and time information:
+                - Date: ${timeInfo.localDate}
+                - Time: ${timeInfo.localTime}
+                - Timezone: ${timezone}
+                - ISO format: ${timeInfo.iso}${locationInfo}
+
+                Important for calendar events:
+                - Always use timezone: ${timezone}
+                - Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
+                - When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
+
+                When user mentions relative times, calculate from the current date/time above.
+
+                When user mentions a person's name for calendar events or emails:
+                - Use the search_contact tool to find their email address
+                - Wait for the contact search result before creating events`
+    };
+
     // Build messages array with history
     let messages;
     
     if (conversationHistory.length > 0) {
+      // Add system message at the start, then history
       messages = [systemMessage, ...conversationHistory];
-      console.log(`📚 Using ${messages.length} messages from history`);
+      console.log(`📚 Using ${conversationHistory.length} messages from history`);
     } else {
+      // New conversation
       messages = [systemMessage, { role: 'user', content: message }];
       console.log('✨ Starting new conversation');
     }
@@ -172,13 +143,14 @@ class AIOrchestrator {
         
         const functionArgs = JSON.parse(toolCall.function.arguments);
         
-        // ⭐ INJECT USER_ID for calendar tools
+        // ⭐ INJECT USER_ID for tools that need it
         const toolsRequiringUserId = [
           'create_calendar_event',
           'list_calendar_events', 
           'update_calendar_event',
           'delete_calendar_event',
-          'check_google_connection'
+          'check_google_connection',
+          'search_contact'
         ];
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
@@ -190,7 +162,6 @@ class AIOrchestrator {
           'weather',
           'nearby_places',
           'local_search'
-          // Add more tools that need location
         ];
         
         if (toolsRequiringLocation.includes(toolCall.function.name) && user_location) {

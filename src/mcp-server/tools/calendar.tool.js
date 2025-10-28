@@ -1,55 +1,7 @@
 import { google } from 'googleapis';
 import {withAutoRetry, isGoogleStillConnected } from '../../services/google-connection.js';
 
-/**
- * Create a Google Calendar event
- */
-// export async function createCalendarEventTool({ 
-//   userId,
-//   summary, 
-//   description = '', 
-//   startDateTime, 
-//   endDateTime,
-//   timeZone = 'Asia/Makassar',
-//   attendees = []
-// }) {
-//   try {
-//     return await withAutoRetry(userId, async (auth) => {
-//       const calendar = google.calendar({ version: 'v3', auth });
-
-//       const event = {
-//         summary,
-//         description,
-//         start: { dateTime: startDateTime, timeZone },
-//         end: { dateTime: endDateTime, timeZone },
-//         attendees: attendees.map(email => ({ email })),
-//         reminders: { useDefault: true }
-//       };
-
-//       const response = await calendar.events.insert({
-//         calendarId: 'primary',
-//         resource: event,
-//         sendUpdates: 'all'
-//       });
-
-//       return {
-//         success: true,
-//         eventId: response.data.id,
-//         htmlLink: response.data.htmlLink,
-//         summary: response.data.summary,
-//         start: response.data.start.dateTime,
-//         end: response.data.end.dateTime,
-//         message: `Event "${summary}" created successfully!`
-//       };
-//     });
-//   } catch (error) {
-//     if (error.code === 'NOT_CONNECTED' || error.code === 'NO_REFRESH' || error.code === 'REFRESH_FAILED') {
-//       throw new Error(`Google Calendar not connected: ${error.message}`);
-//     }
-//     throw new Error(`Calendar API error: ${error.message}`);
-//   }
-// }
-
+//Create a Google Calendar event
 export async function createCalendarEventTool({ 
   userId,
   summary, 
@@ -98,10 +50,7 @@ export async function createCalendarEventTool({
     throw new Error(`Calendar API error: ${error.message}`);
   }
 }
-
-/**
- * List upcoming calendar events
- */
+//List upcoming calendar events
 export async function listCalendarEventsTool({ 
   userId,
   maxResults = 10,
@@ -144,9 +93,7 @@ export async function listCalendarEventsTool({
   }
 }
 
-/**
- * Update calendar event
- */
+//Update calendar event
 export async function updateCalendarEventTool({
   userId,
   eventId,
@@ -191,9 +138,7 @@ export async function updateCalendarEventTool({
   }
 }
 
-/**
- * Delete calendar event
- */
+//Delete calendar event
 export async function deleteCalendarEventTool({ userId, eventId }) {
   try {
     return await withAutoRetry(userId, async (auth) => {
@@ -219,17 +164,15 @@ export async function deleteCalendarEventTool({ userId, eventId }) {
   }
 }
 
-/**
- * Check Google connection
- */
+//Check Google connection
 export async function checkGoogleConnectionTool({ userId }) {
   try {
     const connected = await isGoogleStillConnected(userId);
     return {
       connected,
       message: connected 
-        ? 'Google Calendar is connected and ready.'
-        : 'Google Calendar is not connected. Please reconnect.'
+        ? 'Google Auth is connected and ready.'
+        : 'Google Auth is not connected. Please reconnect.'
     };
   } catch (error) {
     return {

@@ -13,6 +13,7 @@ import {
   deleteCalendarEventTool,
   checkGoogleConnectionTool
 } from './tools/calendar.tool.js';
+import { searchContactTool } from './tools/contact.tool.js';
 
 // Create MCP server
 const server = new Server({
@@ -52,6 +53,20 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_contact',
+    description: 'Search for a contact email address by searching through Gmail history. Finds people the user has emailed with. Use this when you need to find someone\'s email address.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { 
+          type: 'string', 
+          description: 'Name of person to search for (e.g., "fitrah", "john smith", "geri")'
+        }
+      },
+      required: ['name']
+    }
+  },
+  {
     name: 'check_google_connection',
     description: 'Check if Google Calendar is connected and working.',
     inputSchema: {
@@ -59,39 +74,9 @@ const TOOLS = [
       properties: {}
     }
   },
-  // {
-  //   name: 'create_calendar_event',
-  //   description: 'Create a new event in Google Calendar.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {
-  //       summary: { type: 'string', description: 'Event title/summary' },
-  //       description: { type: 'string', description: 'Event description (optional)' },
-  //       startDateTime: { 
-  //         type: 'string', 
-  //         description: 'Start date and time in ISO 8601 format (e.g., 2025-10-27T14:00:00)' 
-  //       },
-  //       endDateTime: { 
-  //         type: 'string', 
-  //         description: 'End date and time in ISO 8601 format (e.g., 2025-10-27T15:00:00)' 
-  //       },
-  //       timeZone: { 
-  //         type: 'string', 
-  //         description: 'Time zone (e.g., Asia/Makassar, America/New_York)',
-  //         default: 'Asia/Makassar'
-  //       },
-  //       attendees: {
-  //         type: 'array',
-  //         items: { type: 'string' },
-  //         description: 'Array of attendee email addresses (optional)'
-  //       }
-  //     },
-  //     required: ['summary', 'startDateTime', 'endDateTime']
-  //   }
-  // },
-    {
+  {
     name: 'create_calendar_event',
-    description: 'Create a new event in Google Calendar. Use the user\'s detected timezone from the system message.',
+    description: 'Create a new event in Google Calendar. Use the detected timezone from system context.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -107,13 +92,13 @@ const TOOLS = [
         },
         timeZone: { 
           type: 'string', 
-          description: 'Timezone (use the timezone from system message)',
+          description: 'Time zone (use the timezone from system message)',
           default: 'Asia/Makassar'
         },
         attendees: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Array of attendee email addresses (optional)'
+          description: 'Array of attendee email addresses (optional). Use search_contact tool first if you need to find email addresses by name.'
         }
       },
       required: ['summary', 'startDateTime', 'endDateTime']
@@ -194,6 +179,20 @@ const toolHandlers = {
     }
     
     const result = await weatherTool({ location, user_location });
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  search_contact: async (args) => {
+    const { name, user_id } = args;
+    console.error(`⚡ MCP: Searching contact "${name}" for user: ${user_id}`);
+    
+    const result = await searchContactTool({ 
+      userId: user_id, 
+      name 
+    });
+    
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
