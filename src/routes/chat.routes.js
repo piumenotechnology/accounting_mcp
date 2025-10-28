@@ -105,6 +105,86 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ... rest of your routes (conversations, history, delete, update title)
+
+// GET /api/chat/conversations/:user_id - Get all user conversations
+router.get('/conversations/:user_id', async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const conversations = await chatModels.getUserConversations(user_id);
+    res.json({ success: true, conversations });
+  } catch (error) {
+    console.error('❌ Error fetching conversations:', error.message);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// GET /api/chat/history/:chat_id - Get conversation history
+router.get('/history/:chat_id', async (req, res) => {
+  try {
+    const { chat_id } = req.params;
+    const { user_id } = req.query;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    // Verify ownership
+    const conversation = await chatModels.getConversationById(chat_id, user_id);
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const history = await chatModels.getConversationHistory(chat_id);
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error('❌ Error fetching history:', error.message);
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+// DELETE /api/chat/:chat_id - Delete conversation
+router.delete('/:chat_id', async (req, res) => {
+  try {
+    const { chat_id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    const deleted = await chatModels.deleteConversation(chat_id, user_id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    res.json({ success: true, message: 'Conversation deleted' });
+  } catch (error) {
+    console.error('❌ Error deleting conversation:', error.message);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
+
+// PATCH /api/chat/:chat_id/title - Update conversation title
+router.patch('/:chat_id/title', async (req, res) => {
+  try {
+    const { chat_id } = req.params;
+    const { user_id, title } = req.body;
+
+    if (!user_id || !title) {
+      return res.status(400).json({ error: 'user_id and title are required' });
+    }
+
+    const updated = await chatModels.updateConversationTitle(chat_id, user_id, title);
+    if (!updated) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    res.json({ success: true, conversation: updated });
+  } catch (error) {
+    console.error('❌ Error updating title:', error.message);
+    res.status(500).json({ error: 'Failed to update title' });
+  }
+});
+
 
 export default router;
