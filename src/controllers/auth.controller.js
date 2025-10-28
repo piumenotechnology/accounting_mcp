@@ -68,6 +68,9 @@ export const auth = {
       // const tableScope = await referralModels.getScope(user.id)
       const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
 
+      console.log(`User ${user.email} logged in via Google.`);
+      console.log('googleConnected', cekGoogleConnectedValid);
+
       // console.log(cekGoogleConnectedValid);
       
       res.json({
@@ -79,8 +82,7 @@ export const auth = {
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 
-      console.log(`User ${user.email} logged in via Google.`);
-      console.log('googleConnected', googleConnected);
+
 
     } catch (error) {
       console.error('Google Auth Error');
