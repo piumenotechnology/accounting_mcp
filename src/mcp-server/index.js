@@ -24,7 +24,7 @@ const server = new Server({
   }
 });
 
-// Define all tools - DON'T include user_id in schema (we inject it)
+// Define all tools
 const TOOLS = [
   {
     name: 'count',
@@ -40,13 +40,15 @@ const TOOLS = [
   },
   {
     name: 'weather',
-    description: 'Get the current weather for a given location.',
+    description: 'Get the current weather for a given location. Can use user location if no location specified.',
     inputSchema: {
       type: 'object',
       properties: {
-        location: { type: 'string', description: 'Location to get the weather for' }
-      },
-      required: ['location']
+        location: { 
+          type: 'string', 
+          description: 'Location to get the weather for (e.g., "Bali", "London"). Optional if user_location is provided.' 
+        }
+      }
     }
   },
   {
@@ -151,8 +153,17 @@ const toolHandlers = {
   },
   
   weather: async (args) => {
-    console.error(`⚡ MCP: Executing weather tool for location: ${args.location}`);
-    const result = await weatherTool({ location: args.location });
+    const { location, user_location } = args;
+    
+    if (user_location) {
+      console.error(`⚡ MCP: Executing weather tool with user location: ${user_location.lat}, ${user_location.lng}`);
+    } else if (location) {
+      console.error(`⚡ MCP: Executing weather tool for location: ${location}`);
+    } else {
+      console.error(`⚡ MCP: Executing weather tool without location`);
+    }
+    
+    const result = await weatherTool({ location, user_location });
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
@@ -168,7 +179,7 @@ const toolHandlers = {
 
   create_calendar_event: async (args) => {
     console.error(`⚡ MCP: Creating calendar event for user: ${args.user_id}`);
-    const { user_id, ...eventData } = args;
+    const { user_id, user_location, ...eventData } = args;
     const result = await createCalendarEventTool({ 
       userId: user_id, 
       ...eventData 
@@ -180,7 +191,7 @@ const toolHandlers = {
 
   list_calendar_events: async (args) => {
     console.error(`⚡ MCP: Listing calendar events for user: ${args.user_id}`);
-    const { user_id, ...queryData } = args;
+    const { user_id, user_location, ...queryData } = args;
     const result = await listCalendarEventsTool({ 
       userId: user_id, 
       ...queryData 
@@ -192,7 +203,7 @@ const toolHandlers = {
 
   update_calendar_event: async (args) => {
     console.error(`⚡ MCP: Updating calendar event for user: ${args.user_id}`);
-    const { user_id, ...eventData } = args;
+    const { user_id, user_location, ...eventData } = args;
     const result = await updateCalendarEventTool({ 
       userId: user_id, 
       ...eventData 
@@ -204,7 +215,7 @@ const toolHandlers = {
 
   delete_calendar_event: async (args) => {
     console.error(`⚡ MCP: Deleting calendar event for user: ${args.user_id}`);
-    const { user_id, ...eventData } = args;
+    const { user_id, user_location, ...eventData } = args;
     const result = await deleteCalendarEventTool({ 
       userId: user_id, 
       ...eventData 

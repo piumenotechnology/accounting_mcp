@@ -1,97 +1,149 @@
-export async function weatherTool({ location }) {
+/**
+ * Get weather data using Open-Meteo API
+ * Supports both location name and user coordinates
+ */
+export async function weatherTool({ location, user_location }) {
   try {
-    // Step 1: Geocode the location to get coordinates
-    // Use more lenient search parameters
-    const geoResponse = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=10&language=en&format=json`
-    );
-    
-    if (!geoResponse.ok) {
-      throw new Error('Failed to fetch location data');
+    let latitude, longitude, locationName;
+
+    // Priority 1: Use user_location if provided
+    if (user_location && user_location.lat && user_location.lng) {
+      latitude = user_location.lat;
+      longitude = user_location.lng;
+      locationName = `${latitude}, ${longitude}`;
+      console.error(`📍 Using user location: ${locationName}`);
     }
-    
-    const geoData = await geoResponse.json();
-    
-    if (!geoData.results || geoData.results.length === 0) {
-      throw new Error(`Location "${location}" not found. Try using just the city name (e.g., "Bali" or "Denpasar")`);
+    // Priority 2: If location string provided, try to geocode it
+    else if (location) {
+      console.error(`📍 Geocoding location: ${location}`);
+      const geocoded = await geocodeLocation(location);
+      if (geocoded) {
+        latitude = geocoded.lat;
+        longitude = geocoded.lng;
+        locationName = geocoded.name;
+      } else {
+        return {
+          success: false,
+          error: `Could not find coordinates for location: ${location}`
+        };
+      }
     }
-    
-    // Get the first result (most relevant)
-    const { latitude, longitude, name, country, admin1 } = geoData.results[0];
-    
-    // Build a nice location string
-    const locationName = admin1 ? `${name}, ${admin1}, ${country}` : `${name}, ${country}`;
-    
-    // Step 2: Get weather data using coordinates
+    // No location data provided
+    else {
+      return {
+        success: false,
+        error: 'No location provided. Please specify a location or enable location services.'
+      };
+    }
+
+    // Fetch weather data from Open-Meteo API
     const weatherResponse = await fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto`
     );
-    
+
     if (!weatherResponse.ok) {
-      throw new Error('Failed to fetch weather data');
+      throw new Error(`Weather API returned status ${weatherResponse.status}`);
     }
-    
+
     const weatherData = await weatherResponse.json();
     const current = weatherData.current;
-    
+
     // Map weather codes to descriptions
-    const weatherDescriptions = {
-      0: 'Clear sky',
-      1: 'Mainly clear',
-      2: 'Partly cloudy',
-      3: 'Overcast',
-      45: 'Foggy',
-      48: 'Depositing rime fog',
-      51: 'Light drizzle',
-      53: 'Moderate drizzle',
-      55: 'Dense drizzle',
-      56: 'Light freezing drizzle',
-      57: 'Dense freezing drizzle',
-      61: 'Slight rain',
-      63: 'Moderate rain',
-      65: 'Heavy rain',
-      66: 'Light freezing rain',
-      67: 'Heavy freezing rain',
-      71: 'Slight snow',
-      73: 'Moderate snow',
-      75: 'Heavy snow',
-      77: 'Snow grains',
-      80: 'Slight rain showers',
-      81: 'Moderate rain showers',
-      82: 'Violent rain showers',
-      85: 'Slight snow showers',
-      86: 'Heavy snow showers',
-      95: 'Thunderstorm',
-      96: 'Thunderstorm with slight hail',
-      99: 'Thunderstorm with heavy hail'
-    };
-    
-    // Get wind direction in text
-    const getWindDirection = (degrees) => {
-      const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      const index = Math.round(degrees / 45) % 8;
-      return directions[index];
-    };
-    
-    return {
+    const weatherDescription = getWeatherDescription(current.weather_code);
+
+    const result = {
+      success: true,
       location: locationName,
-      coordinates: { 
-        latitude: latitude.toFixed(4), 
-        longitude: longitude.toFixed(4) 
-      },
-      temperature: `${Math.round(current.temperature_2m)}°C`,
-      feelsLike: `${Math.round(current.apparent_temperature)}°C`,
-      condition: weatherDescriptions[current.weather_code] || 'Unknown',
+      coordinates: { lat: latitude, lng: longitude },
+      temperature: `${current.temperature_2m}°C`,
+      feels_like: `${current.apparent_temperature}°C`,
       humidity: `${current.relative_humidity_2m}%`,
-      windSpeed: `${Math.round(current.wind_speed_10m)} km/h`,
-      windDirection: `${getWindDirection(current.wind_direction_10m)} (${current.wind_direction_10m}°)`,
-      timestamp: current.time,
-      timezone: weatherData.timezone
+      wind_speed: `${current.wind_speed_10m} km/h`,
+      wind_direction: `${current.wind_direction_10m}°`,
+      condition: weatherDescription,
+      timezone: weatherData.timezone,
+      message: `Weather at ${locationName}: ${current.temperature_2m}°C, ${weatherDescription}`
     };
-    
+
+    console.error(`🌤️ Weather retrieved successfully for ${locationName}`);
+    return result;
+
   } catch (error) {
-    // Better error logging
-    console.error('Weather tool error details:', error);
-    throw new Error(`Weather fetch failed: ${error.message}`);
+    console.error('❌ Weather tool error:', error);
+    return {
+      success: false,
+      error: `Failed to get weather: ${error.message}`
+    };
   }
+}
+
+/**
+ * Geocode location name to coordinates using Open-Meteo Geocoding API
+ */
+async function geocodeLocation(locationName) {
+  try {
+    const geocodeResponse = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationName)}&count=1&language=en&format=json`
+    );
+
+    if (!geocodeResponse.ok) {
+      throw new Error('Geocoding failed');
+    }
+
+    const geocodeData = await geocodeResponse.json();
+    
+    if (geocodeData.results && geocodeData.results.length > 0) {
+      const result = geocodeData.results[0];
+      return {
+        lat: result.latitude,
+        lng: result.longitude,
+        name: result.name,
+        country: result.country
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('❌ Geocoding error:', error);
+    return null;
+  }
+}
+
+/**
+ * Map WMO weather codes to human-readable descriptions
+ * Source: https://open-meteo.com/en/docs
+ */
+function getWeatherDescription(code) {
+  const weatherCodes = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Moderate drizzle',
+    55: 'Dense drizzle',
+    56: 'Light freezing drizzle',
+    57: 'Dense freezing drizzle',
+    61: 'Slight rain',
+    63: 'Moderate rain',
+    65: 'Heavy rain',
+    66: 'Light freezing rain',
+    67: 'Heavy freezing rain',
+    71: 'Slight snow fall',
+    73: 'Moderate snow fall',
+    75: 'Heavy snow fall',
+    77: 'Snow grains',
+    80: 'Slight rain showers',
+    81: 'Moderate rain showers',
+    82: 'Violent rain showers',
+    85: 'Slight snow showers',
+    86: 'Heavy snow showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm with slight hail',
+    99: 'Thunderstorm with heavy hail'
+  };
+
+  return weatherCodes[code] || 'Unknown';
 }

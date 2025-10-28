@@ -144,7 +144,7 @@ class AIOrchestrator {
     this.client = openRouterClient;
   }
   
-  async processMessage(message, user_id, requestedModel = null, conversationHistory = []) {
+  async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null) {
     if (!isConfigured) {
       throw new Error('OpenRouter API key not configured');
     }
@@ -164,6 +164,9 @@ class AIOrchestrator {
     console.log(`🎯 Selected model: ${modelConfig.name} (${modelConfig.id})`);
     console.log(`   User: ${user_id}`);
     console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
+    if (user_location) {
+      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
+    }
     
     // Step 2: Get MCP tools
     await this.mcpClient.connect();
@@ -181,26 +184,25 @@ class AIOrchestrator {
       }
     }));
     
-    // Step 4: Process with OpenRouter (pass history)
+    // Step 4: Process with OpenRouter (pass location)
     return await this.processWithOpenRouter(
       message, 
       user_id, 
       modelConfig.id, 
       tools, 
-      conversationHistory
+      conversationHistory,
+      user_location // ⭐ Pass location
     );
   }
   
-  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = []) {
+  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null) {
     // Build messages array with history
     let messages;
     
     if (conversationHistory.length > 0) {
-      // Use existing conversation history
       messages = [...conversationHistory];
       console.log(`📚 Using ${messages.length} messages from history`);
     } else {
-      // First message in conversation
       messages = [{ role: 'user', content: message }];
       console.log('✨ Starting new conversation');
     }
@@ -251,6 +253,18 @@ class AIOrchestrator {
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
           functionArgs.user_id = user_id;
+        }
+
+        // ⭐ INJECT USER_LOCATION for location-based tools
+        const toolsRequiringLocation = [
+          'weather',
+          'nearby_places',
+          'local_search'
+          // Add more tools that need location
+        ];
+        
+        if (toolsRequiringLocation.includes(toolCall.function.name) && user_location) {
+          functionArgs.user_location = user_location;
         }
         
         // Execute tool via MCP
