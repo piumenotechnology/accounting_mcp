@@ -11,7 +11,7 @@ router.post('/', async (req, res) => {
       user_id, 
       model, 
       provider = 'openai',
-      conversation_id = 'default'  // Add conversation ID support
+      conversation_id = 'default' 
     } = req.body;
     
     if (!message) {
