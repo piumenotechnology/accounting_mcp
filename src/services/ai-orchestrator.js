@@ -6,6 +6,7 @@ class AIOrchestrator {
   constructor() {
     this.mcpClient = new MCPClient();
     this.modelSelector = new ModelSelector();
+    this.client = openRouterClient;
   }
   
   async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null) {
@@ -17,52 +18,28 @@ class AIOrchestrator {
       throw new Error('user_id is required');
     }
     
-    // Determine provider and validate configuration
-    if (provider === 'openai' && !isOpenAIConfigured) {
-      if (isOpenRouterConfigured) {
-        console.log('⚠️ OpenAI not configured, falling back to OpenRouter');
-        provider = 'openrouter';
-      } else {
-        throw new Error('No AI provider configured. Set OPENAI_API_KEY or OPENROUTER_API_KEY');
-      }
-    }
-    
-    if (provider === 'openrouter' && !isOpenRouterConfigured) {
-      if (isOpenAIConfigured) {
-        console.log('⚠️ OpenRouter not configured, falling back to OpenAI');
-        provider = 'openai';
-      } else {
-        throw new Error('No AI provider configured. Set OPENAI_API_KEY or OPENROUTER_API_KEY');
-      }
-    }
-    
-    // Select client and models based on provider
-    const client = provider === 'openai' ? openaiClient : openRouterClient;
-    const models = provider === 'openai' ? openaiModels : openRouterModels;
-    
-    // Determine which model to use
-    const selectedModel = requestedModel || this.getDefaultModel(provider);
+    // Step 1: Determine which model to use
+    const selectedModel = requestedModel || this.modelSelector.selectModel(message);
     const modelConfig = models[selectedModel];
     
     if (!modelConfig) {
-      throw new Error(`Unknown model: ${selectedModel} for provider: ${provider}`);
+      throw new Error(`Unknown model: ${selectedModel}`);
     }
     
-    console.log(`🎯 Provider: ${provider.toUpperCase()}`);
-    console.log(`🎯 Model: ${modelConfig.name} (${modelConfig.id})`);
+    console.log(`🎯 Selected model: ${modelConfig.name} (${modelConfig.id})`);
     console.log(`   User: ${user_id}`);
     console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
     if (user_location) {
       console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
     }
     
-    // Get MCP tools
+    // Step 2: Get MCP tools
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
     
     console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
     
-    // Convert MCP tools to OpenAI format
+    // Step 3: Convert MCP tools to OpenAI format
     const tools = mcpTools.tools.map(tool => ({
       type: 'function',
       function: {
@@ -101,7 +78,7 @@ class AIOrchestrator {
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       console.log(`🔄 Iteration ${iteration + 1}`);
       
-      const response = await client.chat.completions.create({
+      const response = await this.client.chat.completions.create({
         model: modelId,
         messages: messages,
         tools: tools,
@@ -117,7 +94,6 @@ class AIOrchestrator {
           message: choice.message.content,
           toolsCalled: toolsCalled,
           model: modelId,
-          provider: provider,
           usage: response.usage
         };
       }
@@ -131,7 +107,7 @@ class AIOrchestrator {
         
         const functionArgs = JSON.parse(toolCall.function.arguments);
         
-        // Inject user_id for tools that require it
+        // ⭐ INJECT USER_ID for calendar tools
         const toolsRequiringUserId = [
           'create_calendar_event',
           'list_calendar_events', 
@@ -183,8 +159,7 @@ class AIOrchestrator {
     return {
       message: 'Max iterations reached',
       toolsCalled: toolsCalled,
-      model: modelId,
-      provider: provider
+      model: modelId
     };
   }
 }
