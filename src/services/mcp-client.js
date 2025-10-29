@@ -28,6 +28,7 @@ class MCPClient {
         ...process.env,
         ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET,
         POSTGRES_URL: process.env.POSTGRES_URL,
+        GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
         GOOGLE_WEB_CLIENT_ID: process.env.GOOGLE_WEB_CLIENT_ID,
         GOOGLE_WEB_CLIENT_SECRET: process.env.GOOGLE_WEB_CLIENT_SECRET,

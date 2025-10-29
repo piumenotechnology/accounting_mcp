@@ -4,6 +4,8 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+
+// Existing imports
 import { weatherTool } from './tools/weather.tool.js';
 import { 
   createCalendarEventTool, 
@@ -15,6 +17,10 @@ import {
 import { searchContactTool } from './tools/contact.tool.js';
 import { sendEmailTool } from './tools/email.tool.js';
 
+// ⭐ NEW: Import Google Maps
+import { googleMapsTools } from './tools/maps.tools.js';
+import { googleMapsHandlers } from './handlers/maps.handlers.js';
+
 // Create MCP server
 const server = new Server({
   name: 'multi-tool-server',
@@ -25,8 +31,9 @@ const server = new Server({
   }
 });
 
-// Define all tools - DON'T include user_id in schema (we inject it)
+// Define all tools
 const TOOLS = [
+  // Existing tools
   {
     name: 'weather',
     description: 'Get the current weather for a given location. Can use user location if no location specified.',
@@ -179,7 +186,10 @@ const TOOLS = [
       },
       required: ['eventId']
     }
-  }
+  },
+  
+  // ⭐ NEW: Add Google Maps tools
+  ...googleMapsTools
 ];
 
 // Handle tools/list request
@@ -189,6 +199,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
+  // Existing handlers
   weather: async (args) => {
     const { location, user_location } = args;
     
@@ -296,7 +307,10 @@ const toolHandlers = {
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
-  }
+  },
+
+  // ⭐ NEW: Add Google Maps handlers
+  ...googleMapsHandlers
 };
 
 // Handle tools/call request
@@ -332,7 +346,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ MCP Server started successfully');
+  console.error('✅ MCP Server started with Google Maps tools');
 }
 
 main().catch(error => {
