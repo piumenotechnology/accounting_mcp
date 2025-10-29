@@ -1,5 +1,6 @@
 import express from 'express';
 import { chatModels } from '../models/chat.model.js';
+import { authModels } from '../models/user.models.js'
 import AIOrchestrator from '../services/ai-orchestrator.js'; // Adjust path
 
 const router = express.Router();
@@ -63,6 +64,12 @@ router.post('/', async (req, res) => {
       content: message
     });
 
+    const user = await authModels.getUserByid(user_id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     // Call AI Orchestrator with full conversation history + location
     console.log('🤖 Processing with AI Orchestrator...');
     const response = await aiOrchestrator.processMessage(
@@ -70,7 +77,8 @@ router.post('/', async (req, res) => {
       user_id, 
       model,
       conversationHistory,
-      user_location // ⭐ Pass location
+      user_location,
+      user.name
     );
 
     console.log('✅ Response completed');

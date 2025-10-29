@@ -18,6 +18,8 @@ export async function searchContactTool({ userId, name }) {
     // Search Gmail for contact
     const result = await searchContactInGmail(userId, name.trim());
 
+    console.error('🔍 Contact search tool result:', result);
+
     // Format response for AI
     if (result.success && result.match) {
       // Single match found
