@@ -110,18 +110,54 @@ export const chatModels = {
   },
 
   // Update conversation title
-  updateConversationTitle: async (conversation_id, user_id, title) => {
+  // updateConversationTitle: async (conversation_id, user_id, title, favorite) => {
+  //   const query = `
+  //     UPDATE conversations 
+  //     SET title = $1, favorite = $2, updated_at = NOW()
+  //     WHERE id = $3 AND user_id = $4
+  //     RETURNING *`;
+  //   try {
+  //     const result = await pool.query(query, [title, favorite, conversation_id, user_id]);
+  //     return result.rows[0];
+  //   } catch (error) {
+  //     console.error('❌ Error in updateConversationTitle:', error.message);
+  //     throw new Error('Failed to update conversation title');
+  //   }
+  // }
+  updateConversationDetails: async (conversation_id, user_id, { title, favorite }) => {
+  try {
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    if (title !== undefined) {
+      fields.push(`title = $${index++}`);
+      values.push(title);
+    }
+
+    if (favorite !== undefined) {
+      fields.push(`favorite = $${index++}`);
+      values.push(favorite);
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No fields provided for update');
+    }
+
     const query = `
-      UPDATE conversations 
-      SET title = $1, updated_at = NOW()
-      WHERE id = $2 AND user_id = $3
+      UPDATE conversations
+      SET ${fields.join(', ')}, updated_at = NOW()
+      WHERE id = $${index++} AND user_id = $${index}
       RETURNING *`;
-    try {
-      const result = await pool.query(query, [title, conversation_id, user_id]);
-      return result.rows[0];
+
+    values.push(conversation_id, user_id);
+
+    const result = await pool.query(query, values);
+    return result.rows[0];
     } catch (error) {
-      console.error('❌ Error in updateConversationTitle:', error.message);
-      throw new Error('Failed to update conversation title');
+      console.error('❌ Error in updateConversationDetails:', error.message);
+      throw new Error('Failed to update conversation details');
     }
   }
+
 };

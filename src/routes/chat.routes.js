@@ -173,26 +173,28 @@ router.delete('/:chat_id', async (req, res) => {
 });
 
 // PATCH /api/chat/:chat_id/title - Update conversation title
-router.patch('/:chat_id/title', async (req, res) => {
+router.patch('/:chat_id/details', async (req, res) => {
   try {
     const { chat_id } = req.params;
-    const { user_id, title } = req.body;
+    const { user_id, title, favorite } = req.body;
 
-    if (!user_id || !title) {
-      return res.status(400).json({ error: 'user_id and title are required' });
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
     }
 
-    const updated = await chatModels.updateConversationTitle(chat_id, user_id, title);
+    const updated = await chatModels.updateConversationDetails(chat_id, user_id, { title, favorite });
+
     if (!updated) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
     res.json({ success: true, conversation: updated });
   } catch (error) {
-    console.error('❌ Error updating title:', error.message);
-    res.status(500).json({ error: 'Failed to update title' });
+    console.error('❌ Error updating conversation details:', error.message);
+    res.status(500).json({ error: 'Failed to update conversation details' });
   }
 });
+
 
 
 export default router;
