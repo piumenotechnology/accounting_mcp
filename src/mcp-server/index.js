@@ -4,7 +4,6 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { countTool } from './tools/counter.tool.js';
 import { weatherTool } from './tools/weather.tool.js';
 import { 
   createCalendarEventTool, 
@@ -28,18 +27,6 @@ const server = new Server({
 
 // Define all tools - DON'T include user_id in schema (we inject it)
 const TOOLS = [
-  {
-    name: 'count',
-    description: 'Count from start number to end number. Returns an array of numbers.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        start: { type: 'number', description: 'Starting number' },
-        end: { type: 'number', description: 'Ending number' }
-      },
-      required: ['start', 'end']
-    }
-  },
   {
     name: 'weather',
     description: 'Get the current weather for a given location. Can use user location if no location specified.',
@@ -202,14 +189,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
-  count: async (args) => {
-    console.error(`⚡ MCP: Executing count tool: ${args.start} to ${args.end}`);
-    const result = await countTool({ start: args.start, end: args.end });
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-  
   weather: async (args) => {
     const { location, user_location } = args;
     
