@@ -40,7 +40,7 @@ export const chatModels = {
          LIMIT 1) as first_message
       FROM conversations c
       WHERE user_id = $1
-      ORDER BY updated_at DESC`;
+      ORDER BY favorite DESC, updated_at DESC`;
     try {
       const result = await pool.query(query, [user_id]);
       return result.rows;
