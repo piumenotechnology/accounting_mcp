@@ -1,47 +1,120 @@
-import { models } from '../config/ai-clients.js';
+// src/utils/model-selector.js
+
+/**
+ * Smart Model Selector
+ * - Google-related queries → Gemini (better integration with Google services)
+ * - Everything else → Claude (better general reasoning)
+ */
+
 export class ModelSelector {
+  constructor() {
+    // Keywords that indicate Google service usage
+    this.googleKeywords = [
+      // Gmail
+      'email', 'gmail', 'mail', 'send', 'inbox', 'message',
+      
+      // Calendar
+      'calendar', 'meeting', 'schedule', 'appointment', 'event',
+      'tomorrow', 'next week', 'book', 'reschedule',
+      
+      // Maps
+      'direction', 'distance', 'map', 'location', 'place', 
+      'restaurant', 'hotel', 'gym', 'coffee', 'near me',
+      'how far', 'how long', 'route', 'navigate', 'address',
+      'find', 'search for', 'where is', 'show me',
+      
+      // Contacts
+      'contact', 'phone number', 'address book',
+      
+      // Drive (future)
+      'drive', 'document', 'sheet', 'file'
+    ];
+    
+    // Default models
+    this.defaultModel = 'claude';  // Claude for general queries
+    this.googleModel = 'gemini';   // Gemini for Google services
+  }
   
   selectModel(message) {
-    const lowerMessage = message.toLowerCase();
+    const messageLower = message.toLowerCase();
     
-    // Use Claude for complex reasoning, analysis, coding
-    if (this.containsKeywords(lowerMessage, [
-      'analyze', 'complex', 'reasoning', 'explain', 'code', 
-      'programming', 'debug', 'algorithm', 'logic', 'compare'
-    ])) {
-      return 'claude';
+    // Check if message contains any Google-related keywords
+    const isGoogleRelated = this.googleKeywords.some(keyword => 
+      messageLower.includes(keyword)
+    );
+    
+    if (isGoogleRelated) {
+      console.log(`🎯 Google-related query detected → Using ${this.googleModel}`);
+      return this.googleModel;
     }
     
-    // Use GPT-4 for creative writing, storytelling
-    if (this.containsKeywords(lowerMessage, [
-      'write', 'creative', 'story', 'poem', 'essay', 
-      'article', 'blog', 'imagine', 'create content'
-    ])) {
-      return 'gpt4';
+    console.log(`🎯 General query → Using ${this.defaultModel}`);
+    return this.defaultModel;
+  }
+  
+  isMapsQuery(message) {
+    const mapsKeywords = [
+      'direction', 'distance', 'map', 'location', 'place',
+      'restaurant', 'hotel', 'gym', 'coffee', 'near me',
+      'how far', 'how long', 'route', 'navigate', 'find'
+    ];
+    
+    const messageLower = message.toLowerCase();
+    return mapsKeywords.some(keyword => messageLower.includes(keyword));
+  }
+  
+  isGmailQuery(message) {
+    const gmailKeywords = ['email', 'gmail', 'mail', 'send', 'inbox'];
+    const messageLower = message.toLowerCase();
+    return gmailKeywords.some(keyword => messageLower.includes(keyword));
+  }
+  
+  isCalendarQuery(message) {
+    const calendarKeywords = [
+      'calendar', 'meeting', 'schedule', 'appointment', 
+      'event', 'book', 'tomorrow'
+    ];
+    const messageLower = message.toLowerCase();
+    return calendarKeywords.some(keyword => messageLower.includes(keyword));
+  }
+  
+  getModelReasoning(message) {
+    const messageLower = message.toLowerCase();
+    
+    if (this.isMapsQuery(message)) {
+      return {
+        model: this.googleModel,
+        reason: 'Maps-related query (directions, places, location)',
+        keywords: this.googleKeywords.filter(k => messageLower.includes(k))
+      };
     }
     
-    // Use Gemini for quick tasks, simple queries (FREE!)
-    if (this.containsKeywords(lowerMessage, [
-      'count', 'calculate', 'simple', 'quick', 'what is',
-      'how many', 'list', 'summarize', 'add', 'multiply'
-    ])) {
-      return 'gemini';
+    if (this.isGmailQuery(message)) {
+      return {
+        model: this.googleModel,
+        reason: 'Gmail-related query (email, send, inbox)',
+        keywords: this.googleKeywords.filter(k => messageLower.includes(k))
+      };
     }
     
-    // Default to Gemini (FREE)
-    return 'gemini';
-  }
-  
-  containsKeywords(text, keywords) {
-    return keywords.some(keyword => text.includes(keyword));
-  }
-  
-  getModelInfo(modelName) {
-    return models[modelName] || models.gemini;
-  }
-  
-  // Get all available models
-  getAllModels() {
-    return models;
+    if (this.isCalendarQuery(message)) {
+      return {
+        model: this.googleModel,
+        reason: 'Calendar-related query (meeting, schedule, event)',
+        keywords: this.googleKeywords.filter(k => messageLower.includes(k))
+      };
+    }
+    
+    return {
+      model: this.defaultModel,
+      reason: 'General query (coding, analysis, conversation)',
+      keywords: []
+    };
   }
 }
+
+// Example usage:
+// const selector = new ModelSelector();
+// const model = selector.selectModel("Send email to John"); // → gemini
+// const model = selector.selectModel("Explain quantum physics"); // → claude
+// const model = selector.selectModel("Find gyms near me"); // → gemini

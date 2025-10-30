@@ -424,7 +424,6 @@
 
 // export default GoogleMapsService;
 
-
 import { Client } from '@googlemaps/google-maps-services-js';
 
 /**
@@ -445,14 +444,36 @@ class GoogleMapsService {
   /**
    * Search for places
    */
-  async searchPlaces({ query, location, radius = 3000, type, min_rating, open_now, limit = 10 }) {
+  async searchPlaces({ query, location, radius = 3000, type, min_rating, open_now, limit = 5 }) {
     try {
       console.log(`🔍 Searching places: "${query}" near (${location.lat}, ${location.lng})`);
 
-      // Use Text Search API
+      // Smart query enhancement for common terms
+      let enhancedQuery = query;
+      const queryLower = query.toLowerCase();
+      
+      // Map common queries to more specific searches
+      if (queryLower.includes('gym') && !queryLower.includes('equipment') && !queryLower.includes('store')) {
+        enhancedQuery = 'fitness center gym';
+        type = type || 'gym';  // Use gym type
+      } else if (queryLower.includes('restaurant')) {
+        type = type || 'restaurant';
+      } else if (queryLower.includes('coffee') || queryLower.includes('cafe')) {
+        type = type || 'cafe';
+      } else if (queryLower.includes('hotel')) {
+        type = type || 'lodging';
+      } else if (queryLower.includes('hospital')) {
+        type = type || 'hospital';
+      } else if (queryLower.includes('atm')) {
+        type = type || 'atm';
+      } else if (queryLower.includes('gas') || queryLower.includes('petrol')) {
+        type = type || 'gas_station';
+      }
+
+      // Use Text Search API with enhanced query
       const response = await this.client.textSearch({
         params: {
-          query: query,
+          query: enhancedQuery,
           location: `${location.lat},${location.lng}`,
           radius: radius,
           type: type,
@@ -465,6 +486,39 @@ class GoogleMapsService {
       }
 
       let results = response.data.results || [];
+
+      // Smart filtering based on query intent
+      if (queryLower.includes('gym') && !queryLower.includes('equipment') && !queryLower.includes('store')) {
+        console.log(`🏋️ Filtering gym results to exclude stores/shops`);
+        // Remove stores, shops, and equipment sellers
+        results = results.filter(place => {
+          const types = place.types || [];
+          const name = place.name.toLowerCase();
+          
+          // Exclude if it's clearly a store/shop
+          const isStore = types.includes('store') || 
+                          types.includes('sporting_goods_store') ||
+                          types.includes('clothing_store') ||
+                          types.includes('shoe_store') ||
+                          name.includes('supplement') ||
+                          name.includes('nutrition') ||
+                          name.includes('equipment') ||
+                          name.includes('apparel') ||
+                          name.includes('toko') ||  // Indonesian for store
+                          name.includes('shop') ||
+                          name.includes('store');
+          
+          // Must have gym-related indicators
+          const isGym = types.includes('gym') || 
+                        types.includes('health') ||
+                        name.includes('fitness') ||
+                        name.includes('gym') ||
+                        name.includes('training');
+          
+          return !isStore && isGym;
+        });
+        console.log(`✅ Filtered from ${response.data.results.length} to ${results.length} actual gyms`);
+      }
 
       // Filter by rating
       if (min_rating) {

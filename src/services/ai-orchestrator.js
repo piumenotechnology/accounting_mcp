@@ -488,9 +488,6 @@
 //     };
 //   }
 // }
-
-// export default AIOrchestrator;
-
 // src/services/ai-orchestrator.js
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
@@ -514,14 +511,29 @@ class AIOrchestrator {
     }
     
     // Step 1: Determine which model to use
-    const selectedModel = requestedModel || this.modelSelector.selectModel(message);
+    let selectedModel;
+    if (requestedModel) {
+      // User explicitly requested a model
+      selectedModel = requestedModel;
+      console.log(`🎯 Using user-requested model: ${requestedModel}`);
+    } else {
+      // Auto-select based on query type
+      selectedModel = this.modelSelector.selectModel(message);
+      const reasoning = this.modelSelector.getModelReasoning(message);
+      console.log(`🤖 Auto-selected: ${selectedModel}`);
+      console.log(`   Reason: ${reasoning.reason}`);
+      if (reasoning.keywords.length > 0) {
+        console.log(`   Keywords detected: ${reasoning.keywords.join(', ')}`);
+      }
+    }
+    
     const modelConfig = models[selectedModel];
     
     if (!modelConfig) {
       throw new Error(`Unknown model: ${selectedModel}`);
     }
     
-    console.log(`🎯 Selected model: ${modelConfig.name} (${modelConfig.id})`);
+    console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
     console.log(`   User: ${user_id}`);
     console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
     if (user_location) {
@@ -687,6 +699,25 @@ Query patterns:
 • "how far is [place]?" → calculate_distance (origin auto-provided)
 • "how long to [place]?" → get_directions (origin auto-provided)
 • "what's nearby?" → nearby_search (location auto-provided)
+
+CRITICAL - USE SPECIFIC QUERIES:
+When calling search_places, use SPECIFIC query terms:
+❌ WRONG: query: "gym" (returns stores selling gym equipment)
+✅ CORRECT: query: "fitness center gym" (returns actual gyms)
+
+❌ WRONG: query: "coffee" (too vague)
+✅ CORRECT: query: "coffee shop cafe"
+
+❌ WRONG: query: "food" (too broad)
+✅ CORRECT: query: "italian restaurant" or "fast food restaurant"
+
+Examples of good queries:
+• "fitness center gym" → actual fitness centers
+• "coffee shop cafe" → coffee shops
+• "24-hour pharmacy" → pharmacies
+• "italian restaurant" → specific cuisine
+• "gas station" → fuel stations
+• "hospital emergency room" → hospitals
 
 ❌ NEVER say: "I need your location" or "Where are you starting from?"
 ✅ ALWAYS: Just call the tool - location is handled automatically
@@ -952,7 +983,24 @@ Execute these immediately without confirmation.`
         console.log(`⚡ Calling tool: ${toolCall.function.name}`);
         toolsCalled.push(toolCall.function.name);
         
-        const functionArgs = JSON.parse(toolCall.function.arguments);
+        // const functionArgs = JSON.parse(toolCall.function.arguments);
+        let functionArgs = {};
+        try {
+          const argsString = toolCall.function.arguments?.trim();
+          if (!argsString || argsString === '') {
+            console.log('⚠️ Empty arguments, using empty object');
+            functionArgs = {};
+          } else {
+            functionArgs = JSON.parse(argsString);
+            console.log('✅ Parsed arguments:', Object.keys(functionArgs).join(', '));
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse tool arguments:', parseError.message);
+          console.error('   Raw arguments:', toolCall.function.arguments);
+          console.error('   Tool name:', toolCall.function.name);
+          functionArgs = {}; // Fallback to empty object
+          console.log('⚠️ Using empty arguments object as fallback');
+        }
         
         // Inject USER_ID for tools that need it
         const toolsRequiringUserId = [
