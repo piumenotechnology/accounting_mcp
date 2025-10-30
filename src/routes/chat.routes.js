@@ -95,14 +95,7 @@ router.post('/', async (req, res) => {
 
     console.log('✅ Response completed');
 
-    // Save AI response to database
-    await chatModels.saveMessage(
-      conversationId,
-      'assistant',
-      response.message,
-      response.model,
-      response.usage?.total_tokens || 0
-    );
+
 
     // Update conversation timestamp
     await chatModels.updateConversationTimestamp(conversationId);
@@ -110,18 +103,27 @@ router.post('/', async (req, res) => {
     if (mapsToolsUsed && response.toolResults) {
       const structuredData = formatStructuredData(response.toolResults, user_location);
       Object.assign(responseData, structuredData);
+      // Save AI response to database
+      await chatModels.saveMessage(
+        conversationId,
+        'assistant',
+        response.message,
+        response.model,
+        response.usage?.total_tokens || 0,
+        structuredData
+      );
+    }else{
+      // Save AI response to database
+      await chatModels.saveMessage(
+        conversationId,
+        'assistant',
+        response.message,
+        response.model,
+        response.usage?.total_tokens || 0
+      );
     }
 
     res.json(responseData);
-
-    // Return response with conversation_id
-    // res.json({
-    //   conversation_id: conversationId,
-    //   message: response.message,
-    //   toolsCalled: response.toolsCalled,
-    //   model: response.model,
-    //   usage: response.usage
-    // });
 
   } catch (error) {
     console.error('❌ Chat error:', error);
@@ -251,7 +253,6 @@ function formatStructuredData(toolResults, user_location) {
   
   return result;
 }
-
 
 // GET /api/chat/conversations/:user_id - Get all user conversations
 router.get('/conversations/:user_id', async (req, res) => {

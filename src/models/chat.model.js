@@ -64,13 +64,13 @@ export const chatModels = {
   },
 
   // Save message
-  saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0) => {
+  saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
     const query = `
-      INSERT INTO messages (conversation_id, role, content, model, tokens_used)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *`;
     try {
-      const result = await pool.query(query, [conversation_id, role, content, model, tokens_used]);
+      const result = await pool.query(query, [conversation_id, role, content, model, tokens_used,  detailed_content ? JSON.stringify(detailed_content) : null]);
       return result.rows[0];
     } catch (error) {
       console.error('❌ Error in saveMessage:', error.message);
@@ -79,20 +79,50 @@ export const chatModels = {
   },
 
   // Get conversation history (all messages)
+  // getConversationHistory: async (conversation_id) => {
+  //   const query = `
+  //     SELECT id, role, content, model, tokens_used, created_at, detailed_content
+  //     FROM messages
+  //     WHERE conversation_id = $1
+  //     ORDER BY created_at ASC`;
+  //   try {
+  //     const result = await pool.query(query, [conversation_id]);
+  //     return result.rows;
+  //   } catch (error) {
+  //     console.error('❌ Error in getConversationHistory:', error.message);
+  //     throw new Error('Failed to fetch conversation history');
+  //   }
+  // },
+
   getConversationHistory: async (conversation_id) => {
     const query = `
-      SELECT id, role, content, model, tokens_used, created_at
+      SELECT id, role, content, model, tokens_used, created_at, detailed_content
       FROM messages
       WHERE conversation_id = $1
       ORDER BY created_at ASC`;
     try {
       const result = await pool.query(query, [conversation_id]);
-      return result.rows;
+
+      // Transform rows
+      return result.rows.map(row => {
+        let transformed = { ...row };
+
+        // If detailed_content contains places, flatten them
+        if (row.detailed_content?.places) {
+          transformed.places = row.detailed_content.places;
+        }
+
+        // Remove detailed_content from output
+        delete transformed.detailed_content;
+
+        return transformed;
+      });
     } catch (error) {
       console.error('❌ Error in getConversationHistory:', error.message);
       throw new Error('Failed to fetch conversation history');
     }
   },
+
 
   // Delete conversation
   deleteConversation: async (conversation_id, user_id) => {
