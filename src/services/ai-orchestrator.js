@@ -696,14 +696,22 @@ RESPONSE FORMAT:
 When you use search_places or nearby_search, the system returns structured data automatically.
 Keep your response BRIEF - just acknowledge what you found.
 
+IMPORTANT: search_places returns basic info (name, rating, distance, address).
+For phone numbers, website, hours, reviews → user should ask for details on specific place.
+
 For search_places / nearby_search:
-✅ CORRECT: "I found 5 gyms near you."
-✅ CORRECT: "Here are 3 coffee shops nearby, all currently open."
-✅ CORRECT: "Found 4 restaurants - the closest is 800m away."
+✅ CORRECT: "I found 5 gyms near you. Want details on any of them?"
+✅ CORRECT: "Here are 3 coffee shops nearby. Need phone or website for any?"
+✅ CORRECT: "Found 4 restaurants - the closest is 800m away. Which one interests you?"
 
 ❌ WRONG: Don't list all details:
 "1. 🏋️ Gym Name: 3.9 km away, rated 4.4/5 ⭐..."
 (The structured data already contains this!)
+
+When user asks about a specific place:
+User: "Tell me about the second one" or "What's the phone for #2?"
+→ Call get_place_details with that place_id
+→ Return full details (phone, website, hours, reviews)
 
 For get_directions:
 Be slightly more detailed since routes need explanation:
@@ -712,7 +720,7 @@ Be slightly more detailed since routes need explanation:
 
 For get_place_details:
 Highlight key info briefly:
-✅ "Revolver Espresso is rated 4.6/5, open until 5 PM today."
+✅ "Revolver Espresso: +62 361 738 052, revolverespresso.com, rated 4.6/5, open until 5 PM today."
 
 Keep responses conversational and concise. The structured data contains all details.
 
@@ -990,7 +998,7 @@ Execute these immediately without confirmation.`
         try {
           const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
           const preview = resultText.substring(0, 200);
-          // console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
+          console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
         } catch (err) {
           console.log(`✅ Tool result received (preview failed):`, err.message);
         }
