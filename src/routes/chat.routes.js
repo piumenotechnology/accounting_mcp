@@ -19,13 +19,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'user_id is required' });
     }
 
-    console.log('📨 Received message:', message);
+    // console.log('📨 Received message:', message);
     if (model) {
       console.log('🎯 Requested specific model:', model);
     }
-    if (user_location) {
-      console.log('📍 User location:', user_location);
-    }
+    // if (user_location) {
+    //   console.log('📍 User location:', user_location);
+    // }
 
     let conversationId = chat_id;
     let conversationHistory = [];
@@ -46,7 +46,7 @@ router.post('/', async (req, res) => {
         content: msg.content
       }));
       
-      console.log(`💬 Loaded ${conversationHistory.length} previous messages`);
+      // console.log(`💬 Loaded ${conversationHistory.length} previous messages`);
     } else {
       // Create new conversation
       const selectedModel = model || 'gemini';
@@ -94,8 +94,6 @@ router.post('/', async (req, res) => {
     };
 
     console.log('✅ Response completed');
-
-
 
     // Update conversation timestamp
     await chatModels.updateConversationTimestamp(conversationId);

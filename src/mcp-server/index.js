@@ -1,3 +1,4 @@
+// src/mcp-server/index.js
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -16,6 +17,12 @@ import {
 } from './tools/calendar.tool.js';
 import { searchContactTool } from './tools/contact.tool.js';
 import { sendEmailTool } from './tools/email.tool.js';
+import { 
+  getUserSchemasTool,
+  getSchemaStructureTool,
+  executeDynamicQueryTool,
+  getQuickAnalyticsTool
+} from './tools/dynamic-query.tool.js';
 
 // ⭐ NEW: Import Google Maps
 import { googleMapsTools } from './tools/maps.tools.js';
@@ -187,8 +194,145 @@ const TOOLS = [
       required: ['eventId']
     }
   },
-  
-  // ⭐ NEW: Add Google Maps tools
+
+  {
+    name: 'list_data_sources',
+    description: 'List all data sources (companies/clients) the user has access to via referral tokens. Use this to see which companies\' financial data the user can query.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  // {
+  //   name: 'query_profit_loss',
+  //   description: 'Query profit and loss (P&L) data for a specific company. Shows revenue, expenses, and profit over time. Use this when user asks about revenue, sales, expenses, or profit.',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       schema_name: {
+  //         type: 'string',
+  //         description: 'The schema name of the company to query (get from list_data_sources first)'
+  //       },
+  //       start_date: {
+  //         type: 'string',
+  //         description: 'Start date in YYYY-MM-DD format (optional, defaults to last 12 months)'
+  //       },
+  //       end_date: {
+  //         type: 'string',
+  //         description: 'End date in YYYY-MM-DD format (optional, defaults to today)'
+  //       }
+  //     },
+  //     required: ['schema_name']
+  //   }
+  // },
+  // {
+  //   name: 'query_balance_sheet',
+  //   description: 'Query balance sheet (BS) data for a specific company. Shows assets, liabilities, and equity over time. Use this when user asks about assets, liabilities, equity, or financial position.',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       schema_name: {
+  //         type: 'string',
+  //         description: 'The schema name of the company to query (get from list_data_sources first)'
+  //       },
+  //       start_date: {
+  //         type: 'string',
+  //         description: 'Start date in YYYY-MM-DD format (optional)'
+  //       },
+  //       end_date: {
+  //         type: 'string',
+  //         description: 'End date in YYYY-MM-DD format (optional)'
+  //       }
+  //     },
+  //     required: ['schema_name']
+  //   }
+  // },
+  // {
+  //   name: 'use_referral_token',
+  //   description: 'Activate a referral code to gain access to a company\'s financial data. Use this when user provides a new referral code.',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       referral_code: {
+  //         type: 'string',
+  //         description: 'The referral code provided by the user'
+  //       }
+  //     },
+  //     required: ['referral_code']
+  //   }
+  // },
+
+  {
+    name: 'get_schema_structure',
+    description: 'Discover what tables and columns exist in a client\'s schema. Use this FIRST when user asks about their data and you don\'t know the structure. Returns table names, column names, data types, and sample data.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name from list_data_sources'
+        }
+      },
+      required: ['schema_name']
+    }
+  },
+  {
+    name: 'execute_sql_query',
+    description: 'Execute a custom SQL SELECT query on client data. Use this after discovering schema structure. ONLY SELECT statements allowed. Automatically uses the correct schema.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name from list_data_sources'
+        },
+        sql: {
+          type: 'string',
+          description: 'SQL SELECT query (without schema prefix). Example: "SELECT * FROM pl_xero WHERE date >= \'2025-01-01\' LIMIT 10"'
+        },
+        params: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional parameters for parameterized queries (use $1, $2, etc.)'
+        }
+      },
+      required: ['schema_name', 'sql']
+    }
+  },
+  {
+    name: 'get_quick_analytics',
+    description: 'Get quick aggregated analytics from a table. Simplifies common queries like sums, counts, averages grouped by category. Use for "total revenue by category", "count by type", etc.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name from list_data_sources'
+        },
+        table_name: {
+          type: 'string',
+          description: 'Table to query (e.g., pl_xero, bank_transaction)'
+        },
+        metric: {
+          type: 'string',
+          description: 'What to calculate: "SUM(amount)", "COUNT(*)", "AVG(amount)", etc.'
+        },
+        group_by: {
+          type: 'string',
+          description: 'Column to group by (e.g., "category", "type", "contact_name")'
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date YYYY-MM-DD (optional)'
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date YYYY-MM-DD (optional)'
+        }
+      },
+      required: ['schema_name', 'table_name', 'metric']
+    }
+  },
   ...googleMapsTools
 ];
 
@@ -304,6 +448,64 @@ const toolHandlers = {
       userId: user_id, 
       ...eventData 
     });
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  list_data_sources: async (args) => {
+    const { user_id } = args;
+    console.error(`⚡ MCP: Listing data sources for user: ${user_id}`);
+    const result = await getUserSchemasTool({ userId: user_id });
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  get_schema_structure: async (args) => {
+    const { user_id, schema_name } = args;
+    console.error(`⚡ MCP: Getting schema structure for ${schema_name}`);
+    
+    const result = await getSchemaStructureTool({
+      userId: user_id,
+      schemaName: schema_name
+    });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  execute_sql_query: async (args) => {
+    const { user_id, schema_name, sql, params } = args;
+    console.error(`⚡ MCP: Executing SQL on ${schema_name}: ${sql.substring(0, 100)}...`);
+    
+    const result = await executeDynamicQueryTool({
+      userId: user_id,
+      schemaName: schema_name,
+      sql,
+      params
+    });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  get_quick_analytics: async (args) => {
+    const { user_id, schema_name, table_name, metric, group_by, start_date, end_date } = args;
+    console.error(`⚡ MCP: Quick analytics on ${schema_name}.${table_name}`);
+    
+    const result = await getQuickAnalyticsTool({
+      userId: user_id,
+      schemaName: schema_name,
+      tableName: table_name,
+      metric,
+      groupBy: group_by,
+      startDate: start_date,
+      endDate: end_date
+    });
+    
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
