@@ -1,4 +1,4 @@
-// src/mcp-server/index.js
+// src/mcp-server/index.js - UPDATED VERSION
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -17,14 +17,21 @@ import {
 } from './tools/calendar.tool.js';
 import { searchContactTool } from './tools/contact.tool.js';
 import { sendEmailTool } from './tools/email.tool.js';
+
+// ⭐ NEW: Enhanced database tools
 import { 
   getUserSchemasTool,
-  getSchemaStructureTool,
   executeDynamicQueryTool,
   getQuickAnalyticsTool
 } from './tools/dynamic-query.tool.js';
 
-// ⭐ NEW: Import Google Maps
+import {
+  getEnhancedSchemaStructureTool,
+  getQueryPatternTool,
+  listQueryPatternsTool
+} from './tools/enhanced-dynamic-query.tool.js';
+
+// Google Maps
 import { googleMapsTools } from './tools/maps.tools.js';
 import { googleMapsHandlers } from './handlers/maps.handlers.js';
 
@@ -40,7 +47,7 @@ const server = new Server({
 
 // Define all tools
 const TOOLS = [
-  // Existing tools
+  // ... existing tools (weather, contact, email, calendar) ...
   {
     name: 'weather',
     description: 'Get the current weather for a given location. Can use user location if no location specified.',
@@ -195,18 +202,19 @@ const TOOLS = [
     }
   },
 
+  // ⭐ ENHANCED DATABASE TOOLS
   {
-  name: 'list_data_sources',
-  description: 'ALWAYS call this FIRST when user asks about revenue, expenses, profit, or any financial data. Returns list of available company data sources (schemas) that user has access to. Each schema represents a different company or client.',
-  inputSchema: {
-    type: 'object',
-    properties: {}
-  }
+    name: 'list_data_sources',
+    description: 'ALWAYS call this FIRST when user asks about revenue, expenses, profit, or any financial data. Returns list of available company data sources (schemas) that user has access to.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
   },
 
   {
     name: 'get_schema_structure',
-    description: 'CALL THIS SECOND after list_data_sources. Discovers what tables and columns exist in a company\'s database. Returns table names, column names, data types, and sample data. MUST call this before writing any queries to see actual structure.',
+    description: '⭐ ENHANCED: Discovers table structure AND provides custom instructions if available. CALL THIS SECOND after list_data_sources. Returns tables, columns, sample data, AND schema-specific query patterns for complex schemas. CRITICAL: Check for "has_custom_config" flag - if true, you MUST read and follow the custom_instructions provided.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -220,8 +228,42 @@ const TOOLS = [
   },
 
   {
+    name: 'list_query_patterns',
+    description: '⭐ NEW: List available pre-built query patterns for a schema. Use this to discover shortcuts like "revenue_by_customer", "outstanding_invoices", "cash_flow". These are tested, optimized queries for common business questions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name to check for patterns'
+        }
+      },
+      required: ['schema_name']
+    }
+  },
+
+  {
+    name: 'get_query_pattern',
+    description: '⭐ NEW: Get a specific pre-built query pattern. Returns ready-to-use SQL for common queries. You can modify the pattern (add WHERE clauses, change date ranges, etc.) before executing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name'
+        },
+        pattern_name: {
+          type: 'string',
+          description: 'Pattern name from list_query_patterns (e.g., "revenue_by_customer")'
+        }
+      },
+      required: ['schema_name', 'pattern_name']
+    }
+  },
+
+  {
     name: 'execute_sql_query',
-    description: 'Execute a custom SQL SELECT query. ONLY use after calling get_schema_structure to know table/column names. Use for complex queries with filtering, sorting, joins. SECURITY: Only SELECT allowed, no writes.',
+    description: 'Execute a custom SQL SELECT query. ONLY use after calling get_schema_structure. If schema has custom_instructions, follow those rules for joins and business logic.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -231,12 +273,12 @@ const TOOLS = [
         },
         sql: {
           type: 'string',
-          description: 'SQL SELECT query using EXACT table and column names from get_schema_structure. Example: "SELECT SUM(amount) FROM pl_xero WHERE type = \'Revenue\'"'
+          description: 'SQL SELECT query using EXACT table/column names from get_schema_structure. If custom patterns exist, consider using those as templates.'
         },
         params: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Optional parameters for parameterized queries (use $1, $2, etc.)'
+          description: 'Optional parameters for parameterized queries'
         }
       },
       required: ['schema_name', 'sql']
@@ -245,7 +287,7 @@ const TOOLS = [
 
   {
     name: 'get_quick_analytics',
-    description: 'Simplified analytics for common aggregations (SUM, COUNT, AVG). Use AFTER get_schema_structure. Good for: "total revenue", "count by category", "average by month". Automatically handles grouping and filtering.',
+    description: 'Simplified analytics for common aggregations. Use AFTER get_schema_structure. Good for simple totals and counts.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -255,7 +297,7 @@ const TOOLS = [
         },
         table_name: {
           type: 'string',
-          description: 'Table name from get_schema_structure (e.g., "pl_xero")'
+          description: 'Table name from get_schema_structure'
         },
         metric: {
           type: 'string',
@@ -263,7 +305,7 @@ const TOOLS = [
         },
         group_by: {
           type: 'string',
-          description: 'Column to group by from get_schema_structure (e.g., "type", "account_name", "category")'
+          description: 'Column to group by'
         },
         start_date: {
           type: 'string',
@@ -277,86 +319,7 @@ const TOOLS = [
       required: ['schema_name', 'table_name', 'metric']
     }
   },
-
-  // {
-  //   name: 'list_data_sources',
-  //   description: 'List all data sources (companies/clients) the user has access to via referral tokens. Use this to see which companies\' financial data the user can query.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {}
-  //   }
-  // },
-  // {
-  //   name: 'get_schema_structure',
-  //   description: 'Discover what tables and columns exist in a client\'s schema. Use this FIRST when user asks about their data and you don\'t know the structure. Returns table names, column names, data types, and sample data.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {
-  //       schema_name: {
-  //         type: 'string',
-  //         description: 'Schema name from list_data_sources'
-  //       }
-  //     },
-  //     required: ['schema_name']
-  //   }
-  // },
-  // {
-  //   name: 'execute_sql_query',
-  //   description: 'Execute a custom SQL SELECT query on client data. Use this after discovering schema structure. ONLY SELECT statements allowed. Automatically uses the correct schema.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {
-  //       schema_name: {
-  //         type: 'string',
-  //         description: 'Schema name from list_data_sources'
-  //       },
-  //       sql: {
-  //         type: 'string',
-  //         description: 'SQL SELECT query (without schema prefix). Example: "SELECT * FROM pl_xero WHERE date >= \'2025-01-01\' LIMIT 10"'
-  //       },
-  //       params: {
-  //         type: 'array',
-  //         items: { type: 'string' },
-  //         description: 'Optional parameters for parameterized queries (use $1, $2, etc.)'
-  //       }
-  //     },
-  //     required: ['schema_name', 'sql']
-  //   }
-  // },
-  // {
-  //   name: 'get_quick_analytics',
-  //   description: 'Get quick aggregated analytics from a table. Simplifies common queries like sums, counts, averages grouped by category. Use for "total revenue by category", "count by type", etc.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {
-  //       schema_name: {
-  //         type: 'string',
-  //         description: 'Schema name from list_data_sources'
-  //       },
-  //       table_name: {
-  //         type: 'string',
-  //         description: 'Table to query (e.g., pl_xero, bank_transaction)'
-  //       },
-  //       metric: {
-  //         type: 'string',
-  //         description: 'What to calculate: "SUM(amount)", "COUNT(*)", "AVG(amount)", etc.'
-  //       },
-  //       group_by: {
-  //         type: 'string',
-  //         description: 'Column to group by (e.g., "category", "type", "contact_name")'
-  //       },
-  //       start_date: {
-  //         type: 'string',
-  //         description: 'Start date YYYY-MM-DD (optional)'
-  //       },
-  //       end_date: {
-  //         type: 'string',
-  //         description: 'End date YYYY-MM-DD (optional)'
-  //       }
-  //     },
-  //     required: ['schema_name', 'table_name', 'metric']
-  //   }
-  // },
+  
   ...googleMapsTools
 ];
 
@@ -367,7 +330,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
-  // Existing handlers
+  // Existing handlers...
   weather: async (args) => {
     const { location, user_location } = args;
     
@@ -477,6 +440,7 @@ const toolHandlers = {
     };
   },
 
+  // ⭐ ENHANCED DATABASE HANDLERS
   list_data_sources: async (args) => {
     const { user_id } = args;
     console.error(`⚡ MCP: Listing data sources for user: ${user_id}`);
@@ -488,9 +452,9 @@ const toolHandlers = {
 
   get_schema_structure: async (args) => {
     const { user_id, schema_name } = args;
-    console.error(`⚡ MCP: Getting schema structure for ${schema_name}`);
+    console.error(`⚡ MCP: Getting ENHANCED schema structure for ${schema_name}`);
     
-    const result = await getSchemaStructureTool({
+    const result = await getEnhancedSchemaStructureTool({
       userId: user_id,
       schemaName: schema_name
     });
@@ -500,9 +464,38 @@ const toolHandlers = {
     };
   },
 
+  list_query_patterns: async (args) => {
+    const { user_id, schema_name } = args;
+    console.error(`⚡ MCP: Listing query patterns for ${schema_name}`);
+    
+    const result = await listQueryPatternsTool({
+      userId: user_id,
+      schemaName: schema_name
+    });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  get_query_pattern: async (args) => {
+    const { user_id, schema_name, pattern_name } = args;
+    console.error(`⚡ MCP: Getting query pattern ${pattern_name} for ${schema_name}`);
+    
+    const result = await getQueryPatternTool({
+      userId: user_id,
+      schemaName: schema_name,
+      patternName: pattern_name
+    });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
   execute_sql_query: async (args) => {
     const { user_id, schema_name, sql, params } = args;
-    console.error(`⚡ MCP: Executing SQL on ${schema_name}: ${sql.substring(0, 100)}...`);
+    console.error(`⚡ MCP: Executing SQL on ${schema_name}`);
     
     const result = await executeDynamicQueryTool({
       userId: user_id,
@@ -534,6 +527,7 @@ const toolHandlers = {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
   },
+  
   ...googleMapsHandlers
 };
 
@@ -570,7 +564,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ MCP Server started with Google Maps tools');
+  console.error('✅ MCP Server started with ENHANCED database tools');
 }
 
 main().catch(error => {
