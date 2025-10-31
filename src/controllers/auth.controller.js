@@ -33,6 +33,7 @@ export const auth = {
         try {
           const ticket = await client.verifyIdToken({ idToken, audience: aud });
           payload = ticket.getPayload();
+          console.log(payload);
           break;
         } catch (_) {
           console.log("error tisckets");
@@ -58,6 +59,8 @@ export const auth = {
         name,
         picture
       });
+
+      console.log("user",user);
       
       //for user
       const token = generateToken(user); 
