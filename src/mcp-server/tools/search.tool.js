@@ -1,9 +1,5 @@
 import fetch from 'node-fetch';
 
-/**
- * Search the internet using a search API
- * You'll need to set up a search API key (Google Custom Search, Bing, or SerpAPI)
- */
 export async function searchInternetTool({ query, numResults = 5 }) {
   try {
     // Option 1: Using Google Custom Search API
@@ -63,9 +59,6 @@ export async function searchInternetTool({ query, numResults = 5 }) {
   }
 }
 
-/**
- * Fallback search using DuckDuckGo (no API key required)
- */
 async function searchWithDuckDuckGo(query, numResults = 5) {
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
@@ -125,9 +118,6 @@ async function searchWithDuckDuckGo(query, numResults = 5) {
   }
 }
 
-/**
- * Fetch and extract content from a URL
- */
 export async function fetchWebContentTool({ url, extractText = true }) {
   try {
     const response = await fetch(url, {

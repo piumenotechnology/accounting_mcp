@@ -1,11 +1,4 @@
 // src/utils/model-selector.js
-
-/**
- * Smart Model Selector
- * - Google-related queries → Gemini (better integration with Google services)
- * - Everything else → Claude (better general reasoning)
- */
-
 export class ModelSelector {
   constructor() {
     // Keywords that indicate Google service usage

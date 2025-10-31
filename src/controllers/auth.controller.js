@@ -64,6 +64,28 @@ export const auth = {
       const refreshToken = generateRefreshToken();
       await tokenModel.createRefreshToken(user.id, refreshToken, 30);
 
+      const googleToken = await getTokens(user.id);
+      if (googleToken && googleToken.access_token && !googleToken.refresh_token) {
+        try {
+          const oauth = new google.auth.OAuth2(
+            process.env.GOOGLE_WEB_CLIENT_ID,
+            process.env.GOOGLE_WEB_CLIENT_SECRET
+          );
+
+          oauth.setCredentials({
+            access_token: googleToken.access_token
+          });
+
+          await oauth.revokeCredentials();
+
+          // ✅ Only delete tokens if revoke succeeded
+          await deleteTokens(user.id);
+
+        } catch (revokeError) {
+          console.warn('⚠️ Token revoke warning:', revokeError.message);
+        }
+      }
+
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
       const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);

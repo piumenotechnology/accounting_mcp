@@ -21,7 +21,6 @@ export async function getUserSchemasTool({ userId }) {
   }
 }
 
-
 // Get schema structure (tables and columns)
 export async function getSchemaStructureTool({ userId, schemaName }) {
   const client = await pool.connect();
@@ -69,7 +68,7 @@ export async function getSchemaStructureTool({ userId, schemaName }) {
       
       // Get sample data to understand the table better
       const sampleResult = await client.query(
-        `SELECT * FROM ${schemaName}.${table.table_name} LIMIT 3`
+        `SELECT * FROM ${schemaName}.${table.table_name} LIMIT 10`
       );
       
       structure[table.table_name] = {
@@ -230,7 +229,7 @@ export async function getQuickAnalyticsTool({ userId, schemaName, tableName, met
       query += ` ORDER BY total DESC`;
     }
     
-    query += ` LIMIT 50`;
+    query += ` LIMIT 1000`;
     
     const result = await client.query(query, params);
     

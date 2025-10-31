@@ -2,14 +2,6 @@ import GoogleMapsService from '../../services/google-maps.js';
 
 const mapsService = new GoogleMapsService();
 
-/**
- * Google Maps Tool Handlers
- * These functions are called by the MCP server when tools are invoked
- */
-
-/**
- * Handle search_places tool
- */
 export async function handleSearchPlaces(args) {
   try {
     console.log('🔧 Tool called: search_places');
@@ -83,9 +75,6 @@ export async function handleSearchPlaces(args) {
   }
 }
 
-/**
- * Handle get_directions tool
- */
 export async function handleGetDirections(args) {
   try {
     console.log('🔧 Tool called: get_directions');
@@ -157,9 +146,6 @@ export async function handleGetDirections(args) {
   }
 }
 
-/**
- * Handle get_place_details tool
- */
 export async function handleGetPlaceDetails(args) {
   try {
     console.log('🔧 Tool called: get_place_details');
@@ -211,9 +197,6 @@ export async function handleGetPlaceDetails(args) {
   }
 }
 
-/**
- * Handle calculate_distance tool
- */
 export async function handleCalculateDistance(args) {
   try {
     console.log('🔧 Tool called: calculate_distance');
@@ -280,9 +263,6 @@ export async function handleCalculateDistance(args) {
   }
 }
 
-/**
- * Handle nearby_search tool
- */
 export async function handleNearbySearch(args) {
   try {
     console.log('🔧 Tool called: nearby_search');
@@ -338,9 +318,6 @@ export async function handleNearbySearch(args) {
   }
 }
 
-/**
- * Map tool names to handlers
- */
 export const googleMapsHandlers = {
   'search_places': handleSearchPlaces,
   'get_directions': handleGetDirections,
