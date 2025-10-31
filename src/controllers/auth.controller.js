@@ -66,7 +66,24 @@ export const auth = {
 
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
-      const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+      // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+      let cekGoogleConnectedValid = true;
+      
+      const googleTokens = await getTokens(user.id);
+      // revoke Google access if only access_token exists or no tokens
+      if (!googleTokens || (googleTokens.access_token && !googleTokens.refresh_token)) {
+          const oauth = new google.auth.OAuth2(
+            process.env.GOOGLE_WEB_CLIENT_ID,
+            process.env.GOOGLE_WEB_CLIENT_SECRET
+          );
+
+          oauth.setCredentials({
+            access_token: googleTokens.access_token
+          });
+
+          await oauth.revokeCredentials();
+          cekGoogleConnectedValid = false;
+      }
 
       console.log(`User ${user.email} logged in via Google.`);
       console.log('googleConnected', cekGoogleConnectedValid);
@@ -81,8 +98,6 @@ export const auth = {
         // scopes: tableScope,
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
-
-
 
     } catch (error) {
       console.error('Google Auth Error');
