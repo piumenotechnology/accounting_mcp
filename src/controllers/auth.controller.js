@@ -62,27 +62,19 @@ export const auth = {
       //for user
       const token = generateToken(user); 
       const refreshToken = generateRefreshToken();
-      // await tokenModel.createRefreshToken(user.id, refreshToken, 30);
-
-      console.log(token);
-      console.log(refreshToken);
+      await tokenModel.createRefreshToken(user.id, refreshToken, 30);
 
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
-      // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
-
-      console.log(`User ${user.email} logged in via Google.`);
-      // console.log('googleConnected', cekGoogleConnectedValid);
-
-      // console.log(cekGoogleConnectedValid);
-      
+      const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+            
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
         token,
         refreshToken,
         // referral,
         // scopes: tableScope,
-        // googleConnected: cekGoogleConnectedValid // true when we attempted to connect
+        googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 
     } catch (error) {
