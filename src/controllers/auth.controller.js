@@ -64,6 +64,9 @@ export const auth = {
       const refreshToken = generateRefreshToken();
       await tokenModel.createRefreshToken(user.id, refreshToken, 30);
 
+      console.log(token);
+      console.log(refreshToken);
+
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
       // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
