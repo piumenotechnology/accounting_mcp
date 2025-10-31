@@ -66,10 +66,10 @@ export const auth = {
 
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
-      const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+      // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
 
       console.log(`User ${user.email} logged in via Google.`);
-      console.log('googleConnected', cekGoogleConnectedValid);
+      // console.log('googleConnected', cekGoogleConnectedValid);
 
       // console.log(cekGoogleConnectedValid);
       
@@ -79,11 +79,11 @@ export const auth = {
         refreshToken,
         // referral,
         // scopes: tableScope,
-        googleConnected: cekGoogleConnectedValid // true when we attempted to connect
+        // googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 
     } catch (error) {
-      console.error('Google Auth Error');
+      console.error('Google Auth Error login');
       res.status(401).json({ error: 'Invalid Google token login' });
     }
   },
