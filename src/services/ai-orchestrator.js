@@ -1,51 +1,72 @@
-// src/services/ai-orchestrator.js - REFACTORED VERSION
+// src/services/ai-orchestrator.js
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
 import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
-
-// Modular imports
-import { SystemPromptBuilder } from './prompts/system-prompt-builder.js';
-import { ToolConfig } from './config/tool-config.js';
-import { ConversationManager } from './utils/conversation-manager.js';
-import { ToolExecutor } from './utils/tool-executor.js';
 
 class AIOrchestrator {
   constructor() {
     this.mcpClient = new MCPClient();
     this.modelSelector = new ModelSelector();
     this.client = openRouterClient;
-    this.promptBuilder = new SystemPromptBuilder();
-    this.toolExecutor = new ToolExecutor(this.mcpClient);
   }
   
-  /**
-   * Main entry point for processing messages
-   */
-  async processMessage(
-    message, 
-    user_id, 
-    requestedModel = null, 
-    conversationHistory = [], 
-    user_location = null, 
-    user_name
-  ) {
-    // Validate inputs
-    this._validateInputs(user_id);
+  async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null, user_name ) {
+    if (!isConfigured) {
+      throw new Error('OpenRouter API key not configured');
+    }
     
-    // Select model
-    const selectedModel = this._selectModel(message, requestedModel);
-    const modelConfig = this._getModelConfig(selectedModel);
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
     
-    // Log processing info
-    this._logProcessingInfo(modelConfig, user_id, conversationHistory, user_location);
+    // Step 1: Determine which model to use
+    let selectedModel;
+    if (requestedModel) {
+      // User explicitly requested a model
+      selectedModel = requestedModel;
+      console.log(`🎯 Using user-requested model: ${requestedModel}`);
+    } else {
+      // Auto-select based on query type
+      selectedModel = this.modelSelector.selectModel(message);
+      const reasoning = this.modelSelector.getModelReasoning(message);
+      console.log(`🤖 Auto-selected: ${selectedModel}`);
+      console.log(`   Reason: ${reasoning.reason}`);
+      if (reasoning.keywords.length > 0) {
+        console.log(`   Keywords detected: ${reasoning.keywords.join(', ')}`);
+      }
+    }
     
-    // Initialize MCP tools
+    const modelConfig = models[selectedModel];
+    
+    if (!modelConfig) {
+      throw new Error(`Unknown model: ${selectedModel}`);
+    }
+    
+    console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
+    console.log(`   User: ${user_id}`);
+    console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
+    if (user_location) {
+      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
+    }
+    
+    // Step 2: Get MCP tools
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
-    const tools = this._convertMCPToolsToOpenAI(mcpTools);
     
-    // Process with OpenRouter
+    console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
+    
+    // Step 3: Convert MCP tools to OpenAI format
+    const tools = mcpTools.tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema
+      }
+    }));
+    
+    // Step 4: Process with OpenRouter (pass location)
     return await this.processWithOpenRouter(
       message, 
       user_id, 
@@ -57,55 +78,346 @@ class AIOrchestrator {
     );
   }
   
-  /**
-   * Process message with OpenRouter API
-   */
-  async processWithOpenRouter(
-    message, 
-    user_id, 
-    modelId, 
-    tools, 
-    conversationHistory = [], 
-    user_location = null, 
-    user_name
-  ) {
-    // Build context
-    const context = this._buildContext(user_location, user_name);
+  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null, user_name ) {
+    // Detect timezone from user location
+    let timezone = 'Asia/Makassar';
+    let locationInfo = '';
     
-    // Build system message using modular prompt builder
-    const systemMessage = this.promptBuilder.build(context);
-    
-    // Build messages array
-    let messages = ConversationManager.buildMessages(
-      systemMessage,
-      message,
-      conversationHistory
-    );
-    
-    // Execute tool loop
-    const result = await this._executeToolLoop(
-      messages,
-      modelId,
-      tools,
-      user_id,
-      user_location
-    );
-    
-    return result;
-  }
+    if (user_location && user_location.lat && user_location.lng) {
+      timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
+      locationInfo = `\nUser coordinates: ${user_location.lat}, ${user_location.lng}`;
+    }
 
-  /**
-   * Main tool execution loop
-   */
-  async _executeToolLoop(messages, modelId, tools, user_id, user_location) {
+    // Get current time in user's timezone
+    const timeInfo = getCurrentTimeInTimezone(timezone);
+    
+    // Build system message with confirmation rules
+    const systemMessage = {
+      role: 'system',
+      content: `${user_location ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 CRITICAL: USER LOCATION IS AVAILABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Current Location: ${user_location.lat}, ${user_location.lng}
+
+For ANY location/maps query, use these coordinates as origin/starting point.
+❌ NEVER ask: "Where are you?", "What's your starting point?", "I need your location"
+✅ ALWAYS use the coordinates above automatically
+
+EXAMPLES OF CORRECT USAGE:
+• User: "how do I get to airport?" 
+  → Call: get_directions(origin: user_location, destination: "airport")
+  
+• User: "how far is the stadium?"
+  → Call: calculate_distance(origin: user_location, destination: "stadium")
+  
+• User: "find gyms near me"
+  → Call: search_places(location: user_location, query: "gym")
+
+• User: "how long to Ubud?"
+  → Call: get_directions(origin: user_location, destination: "Ubud")
+
+DO NOT respond with "I need your starting point" - USE THE LOCATION ABOVE!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+` : ''}Current date and time information:
+- Date: ${timeInfo.localDate}
+- Time: ${timeInfo.localTime}
+- Timezone: ${timezone}
+- ISO format: ${timeInfo.iso}${locationInfo}
+
+USER INFORMATION:
+- User name: ${user_name}
+
+EMAIL SIGNATURE:
+When sending emails, ALWAYS sign with the user's name:
+"Best regards,
+${user_name}"
+
+NEVER use "[Your Name]" or placeholder text.
+ALWAYS use the actual user name above.
+
+═══════════════════════════════════════════════════════════════
+GOOGLE MAPS TOOLS
+═══════════════════════════════════════════════════════════════
+
+${user_location ? `✅ USER LOCATION IS AVAILABLE: ${user_location.lat}, ${user_location.lng}
+Use this automatically for all location-based queries.
+` : '⚠️ User location not provided - ask for it if needed for maps queries.'}
+
+Available tools:
+1. search_places - Find restaurants, cafes, ATMs, hotels, hospitals, etc.
+2. get_directions - Get route with turn-by-turn instructions and traffic
+3. get_place_details - Get hours, phone, reviews, photos for a place
+4. calculate_distance - Quick distance/time between two points
+5. nearby_search - Discover top-rated places near a location
+
+${user_location ? `CRITICAL - AUTOMATIC LOCATION USAGE:
+When user asks location-based questions, tools automatically receive user_location.
+You don't need to ask for it - just call the tool!
+
+Query patterns:
+• "find [place] near me" → search_places (location auto-provided)
+• "how do I get to [place]?" → get_directions (origin auto-provided)
+• "how far is [place]?" → calculate_distance (origin auto-provided)
+• "how long to [place]?" → get_directions (origin auto-provided)
+• "what's nearby?" → nearby_search (location auto-provided)
+
+CRITICAL - USE SPECIFIC QUERIES:
+When calling search_places, use SPECIFIC query terms:
+❌ WRONG: query: "gym" (returns stores selling gym equipment)
+✅ CORRECT: query: "fitness center gym" (returns actual gyms)
+
+❌ WRONG: query: "coffee" (too vague)
+✅ CORRECT: query: "coffee shop cafe"
+
+❌ WRONG: query: "food" (too broad)
+✅ CORRECT: query: "italian restaurant" or "fast food restaurant"
+
+Examples of good queries:
+• "fitness center gym" → actual fitness centers
+• "coffee shop cafe" → coffee shops
+• "24-hour pharmacy" → pharmacies
+• "italian restaurant" → specific cuisine
+• "gas station" → fuel stations
+• "hospital emergency room" → hospitals
+
+❌ NEVER say: "I need your location" or "Where are you starting from?"
+✅ ALWAYS: Just call the tool - location is handled automatically
+` : ''}
+
+RESPONSE FORMAT:
+When you use search_places or nearby_search, the system returns structured data automatically.
+Keep your response BRIEF - just acknowledge what you found.
+
+IMPORTANT: search_places returns basic info (name, rating, distance, address).
+For phone numbers, website, hours, reviews → user should ask for details on specific place.
+
+For search_places / nearby_search:
+✅ CORRECT: "I found 5 gyms near you. Want details on any of them?"
+✅ CORRECT: "Here are 3 coffee shops nearby. Need phone or website for any?"
+✅ CORRECT: "Found 4 restaurants - the closest is 800m away. Which one interests you?"
+
+❌ WRONG: Don't list all details:
+"1. 🏋️ Gym Name: 3.9 km away, rated 4.4/5 ⭐..."
+(The structured data already contains this!)
+
+When user asks about a specific place:
+User: "Tell me about the second one" or "What's the phone for #2?"
+→ Call get_place_details with that place_id
+→ Return full details (phone, website, hours, reviews)
+
+For get_directions:
+Be slightly more detailed since routes need explanation:
+✅ "It's 12 km to the airport, about 20 minutes via Jl. Bypass Ngurah Rai."
+✅ "The stadium is 8.5 km away, roughly 15 minutes by car."
+
+For get_place_details:
+Highlight key info briefly:
+✅ "Revolver Espresso: +62 361 738 052, revolverespresso.com, rated 4.6/5, open until 5 PM today."
+
+Keep responses conversational and concise. The structured data contains all details.
+
+═══════════════════════════════════════════════════════════════
+
+Important for calendar events:
+- Always use timezone: ${timezone}
+- Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
+- When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
+
+When user mentions relative times, calculate from the current date/time above.
+
+═══════════════════════════════════════════════════════════════
+CRITICAL - TWO-STEP CONFIRMATION SYSTEM
+═══════════════════════════════════════════════════════════════
+
+STEP 1: CONTACT DISAMBIGUATION (When Multiple Contacts Found)
+─────────────────────────────────────────────────────────────
+
+When search_contact returns requiresDisambiguation: true:
+
+1. NEVER automatically pick one - ALWAYS show the numbered list
+2. Format naturally and conversationally:
+
+  "I found [number] people named '[name]':
+  
+  1. [Full Name] ([email@address.com])
+      Last contact: [X days ago]
+  
+  2. [Full Name] ([email@address.com])
+      Last contact: [X days ago]
+  
+  Which one did you mean?"
+
+  OR more casual:
+  
+  "There are [number] [name]s in your contacts:
+  
+  1. [Name] - [email]
+  2. [Name] - [email]
+  
+  Which one?"
+
+3. WAIT for selection: "1", "2", "first one", "the recent one", or the actual name
+4. Keep it conversational, not robotic
+5. Once selected, proceed naturally
+
+When search_contact returns noCloseMatch: true:
+
+This means the name is too different from contacts found (e.g., user typed "fitrahrr" but only "Fitrah" exists).
+
+Format response:
+
+"I couldn't find a close match for '[name]' in your contacts.
+
+Did you mean one of these?
+- [Suggested Name 1]
+- [Suggested Name 2]
+- [Suggested Name 3]
+
+Or please provide their email address directly."
+
+WAIT for user to clarify:
+- If they pick a name: Search again with that name
+- If they provide email: Use that email directly
+- DO NOT proceed without clarification
+
+STEP 2: ACTION CONFIRMATION (Always Required)
+─────────────────────────────────────────────────────────────
+
+Before executing ANY action (email, calendar event, delete):
+
+Use NATURAL, CONVERSATIONAL language. Be friendly and casual while still being clear.
+
+FOR EMAILS:
+Show preview in natural language:
+
+"I'll send this to [Name]:
+
+[Quote the key message/content]
+
+Want me to send it?"
+
+OR for more detail:
+
+"Got it! I'll email [Name] ([email]) about [topic].
+
+Subject: [subject]
+Message: [preview of content]
+
+Should I send that?"
+
+Alternative confirmations: "Sound good?", "Ready to send?", "Look okay?"
+
+FOR CALENDAR EVENTS:
+Show details naturally:
+
+"I'll set up a meeting with [Name]:
+• [Day] at [time]
+• [Duration]
+• They'll get a calendar invite
+
+Should I create it?"
+
+OR shorter:
+
+"Perfect! Inviting [Name] to meet [when] - want me to send the invite?"
+
+Alternative confirmations: "Good to create?", "Want me to book it?", "Should I set that up?"
+
+FOR DELETING EVENTS:
+"Just checking - delete [Event Name] on [Date]?
+
+This can't be undone. Confirm?"
+
+Alternative: "Remove this event? Just want to make sure."
+
+WAITING FOR CONFIRMATION:
+- Accept natural confirmations: "yes", "yeah", "yep", "sure", "ok", "okay", "go ahead", "send it", "do it", "create it", "looks good", "sounds good", "perfect"
+- Don't proceed if: "no", "nope", "wait", "hold on", "cancel", "stop", "not yet", "change it"
+- If user wants to edit, ask what they'd like to change
+- If user provides changes, show updated preview naturally and ask again
+
+BE CONVERSATIONAL:
+- Drop the emojis unless it fits naturally
+- Use contractions ("I'll" not "I will", "won't" not "will not")
+- Be friendly but concise
+- Don't over-explain
+- Match the user's tone (if they're casual, be casual)
+
+AVOID:
+- Overly formal language
+- Too many emojis (📧📋📝)
+- Repetitive phrases like "Reply 'yes' to..."
+- Robot-like formatting
+- Unnecessary line breaks
+
+═══════════════════════════════════════════════════════════════
+
+CRITICAL RULES - NEVER VIOLATE:
+1. Multiple contacts found → Show list → Wait for selection → Show confirmation → Wait for yes
+2. Single contact found → Show confirmation → Wait for yes
+3. NEVER send emails without explicit "yes"
+4. NEVER create events without explicit "yes"
+5. ALWAYS show full name AND email address in confirmations
+6. ALWAYS wait for user response before executing tools
+
+CONTEXT TRACKING:
+- Remember what action the user originally requested (email, calendar event, etc.)
+- When user selects a contact from a list, continue with the ORIGINAL action
+- Example:
+  User: "Create meeting with fitrah"
+  You: [Show list of fitrahs]
+  User: "1"
+  You: [Create CALENDAR EVENT with selected fitrah] ← NOT email!
+  
+- Do NOT switch actions mid-conversation
+- If user says "1" or "2" after a contact list, they're selecting from that list
+- Continue with the original action type (email, calendar, etc.)
+
+Example Flow:
+User: "Email fitrah about payment"
+You: [search_contact tool]
+Result: 3 matches found
+You: [Show numbered list, ask which one]
+User: "1"
+You: [Generate EMAIL content for selected contact, show preview, ask for confirmation]
+User: "yes"
+You: [Execute send_email tool]
+You: "✅ Email sent to Fitrah Ahmad (fitrah.ahmad@gmail.com)"
+
+READ-ONLY OPERATIONS (No confirmation needed):
+- search_contact (just searching, not sending)
+- list_calendar_events (just listing)
+- weather (just checking)
+- check_google_connection (just checking)
+- search_places (just searching)
+- get_directions (just getting directions)
+- nearby_search (just searching)
+- list_data_sources (just listing)
+- get_schema_structure (just reading structure)
+
+Execute these immediately without confirmation.`
+    };
+
+    // Build messages array with history
+    let messages;
+    
+    if (conversationHistory.length > 0) {
+      messages = [systemMessage, ...conversationHistory];
+      console.log(`📚 Using ${conversationHistory.length} messages from history`);
+    } else {
+      messages = [systemMessage, { role: 'user', content: message }];
+      console.log('✨ Starting new conversation');
+    }
+    
     let toolsCalled = [];
     let toolResults = [];
-    const maxIterations = 10;
+    let maxIterations = 10; // Increased for disambiguation + confirmation flows
     
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       console.log(`🔄 Iteration ${iteration + 1}`);
       
-      // Call OpenRouter API
       const response = await this.client.chat.completions.create({
         model: modelId,
         messages: messages,
@@ -116,220 +428,119 @@ class AIOrchestrator {
       const choice = response.choices[0];
       console.log(`🤖 Finish reason: ${choice.finish_reason}`);
       
-      // Check if we're done
-      if (this._isComplete(choice)) {
-        return this._buildFinalResponse(
-          choice,
-          response,
-          toolsCalled,
-          toolResults,
-          modelId
-        );
+      // No tool calls - return final answer
+      if (choice.finish_reason === 'stop' || !choice.message.tool_calls) {
+        return {
+          message: choice.message.content,
+          toolsCalled: toolsCalled,
+          toolResults: toolResults,
+          model: modelId,
+          usage: response.usage
+        };
       }
       
       // Handle tool calls
-      if (this._hasToolCalls(choice)) {
-        const continueLoop = await this._handleToolCall(
-          choice,
-          messages,
-          toolsCalled,
-          toolResults,
-          user_id,
-          user_location
-        );
+      if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+        const toolCall = choice.message.tool_calls[0];
         
-        if (continueLoop) {
-          continue;
+        console.log(`⚡ Calling tool: ${toolCall.function.name}`);
+        toolsCalled.push(toolCall.function.name);
+        
+        // const functionArgs = JSON.parse(toolCall.function.arguments);
+        let functionArgs = {};
+        try {
+          const argsString = toolCall.function.arguments?.trim();
+          if (!argsString || argsString === '') {
+            console.log('⚠️ Empty arguments, using empty object');
+            functionArgs = {};
+          } else {
+            functionArgs = JSON.parse(argsString);
+            console.log('✅ Parsed arguments:', Object.keys(functionArgs).join(', '));
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse tool arguments:', parseError.message);
+          console.error('   Raw arguments:', toolCall.function.arguments);
+          console.error('   Tool name:', toolCall.function.name);
+          functionArgs = {}; // Fallback to empty object
+          console.log('⚠️ Using empty arguments object as fallback');
         }
+        
+        // Inject USER_ID for tools that need it
+        const toolsRequiringUserId = [
+          'create_calendar_event',
+          'list_calendar_events', 
+          'update_calendar_event',
+          'delete_calendar_event',
+          'check_google_connection',
+          'search_contact',
+          'send_email',
+        ];
+        
+        if (toolsRequiringUserId.includes(toolCall.function.name)) {
+          functionArgs.user_id = user_id;
+        }
+
+        // Inject USER_LOCATION for location-based tools
+        const toolsRequiringLocation = [
+          'weather',
+          'search_places',
+          'get_directions',
+          'get_place_details',
+          'calculate_distance',
+          'nearby_search'
+        ];
+        
+        if (toolsRequiringLocation.includes(toolCall.function.name) && user_location) {
+          functionArgs.user_location = user_location;
+          console.log(`📍 Injected user_location for ${toolCall.function.name}`);
+        }
+        
+        // Execute tool via MCP
+        const toolResult = await this.mcpClient.callTool({
+          name: toolCall.function.name,
+          arguments: functionArgs
+        });
+
+        // Safe result preview
+        try {
+          const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
+          const preview = resultText.substring(0, 200);
+          console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
+        } catch (err) {
+          console.log(`✅ Tool result received (preview failed):`, err.message);
+        }
+
+        // Store tool results for structured data
+        try {
+          const resultText = toolResult?.content?.[0]?.text;
+          if (resultText) {
+            const parsedResult = JSON.parse(resultText);
+            toolResults.push({
+              tool: toolCall.function.name,
+              data: parsedResult
+            });
+            console.log(`📦 Stored result from ${toolCall.function.name}`);
+          }
+        } catch (parseErr) {
+          console.log('⚠️ Could not parse tool result for structured data');
+        }
+        
+        // Add assistant message with tool call
+        messages.push(choice.message);
+        
+        // Add tool result
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolResult.content)
+        });
+        
+        continue;
       }
       
       break;
     }
     
-    return this._buildMaxIterationsResponse(toolsCalled, toolResults, modelId);
-  }
-
-  /**
-   * Handle a single tool call
-   */
-  async _handleToolCall(
-    choice, 
-    messages, 
-    toolsCalled, 
-    toolResults, 
-    user_id, 
-    user_location
-  ) {
-    const toolCall = choice.message.tool_calls[0];
-    const toolName = toolCall.function.name;
-    
-    toolsCalled.push(toolName);
-    
-    // Parse and inject parameters
-    let functionArgs = ToolExecutor.parseArguments(
-      toolCall.function.arguments,
-      toolName
-    );
-    
-    functionArgs = ToolConfig.injectParameters(
-      toolName,
-      functionArgs,
-      { user_id, user_location }
-    );
-    
-    // Execute tool
-    const toolResult = await this.toolExecutor.execute({
-      function: {
-        name: toolName,
-        arguments: JSON.stringify(functionArgs)
-      }
-    });
-    
-    // Store results
-    ToolExecutor.storeResult(toolResults, toolName, toolResult);
-    
-    // Update conversation
-    ConversationManager.addAssistantMessage(messages, choice.message);
-    ConversationManager.addToolResult(messages, toolCall.id, toolResult);
-    
-    return true; // Continue loop
-  }
-
-  // ============================================
-  // HELPER METHODS
-  // ============================================
-
-  /**
-   * Validate required inputs
-   */
-  _validateInputs(user_id) {
-    if (!isConfigured) {
-      throw new Error('OpenRouter API key not configured');
-    }
-    
-    if (!user_id) {
-      throw new Error('user_id is required');
-    }
-  }
-
-  /**
-   * Select appropriate model
-   */
-  _selectModel(message, requestedModel) {
-    if (requestedModel) {
-      console.log(`🎯 Using user-requested model: ${requestedModel}`);
-      return requestedModel;
-    }
-    
-    const selectedModel = this.modelSelector.selectModel(message);
-    const reasoning = this.modelSelector.getModelReasoning(message);
-    
-    console.log(`🤖 Auto-selected: ${selectedModel}`);
-    console.log(`   Reason: ${reasoning.reason}`);
-    
-    if (reasoning.keywords.length > 0) {
-      console.log(`   Keywords detected: ${reasoning.keywords.join(', ')}`);
-    }
-    
-    return selectedModel;
-  }
-
-  /**
-   * Get model configuration
-   */
-  _getModelConfig(modelName) {
-    const config = models[modelName];
-    if (!config) {
-      throw new Error(`Unknown model: ${modelName}`);
-    }
-    return config;
-  }
-
-  /**
-   * Log processing information
-   */
-  _logProcessingInfo(modelConfig, user_id, conversationHistory, user_location) {
-    console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
-    console.log(`   User: ${user_id}`);
-    console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
-    
-    if (user_location) {
-      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
-    }
-  }
-
-  /**
-   * Convert MCP tools to OpenAI format
-   */
-  _convertMCPToolsToOpenAI(mcpTools) {
-    console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
-    
-    return mcpTools.tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema
-      }
-    }));
-  }
-
-  /**
-   * Build context for prompt builder
-   */
-  _buildContext(user_location, user_name) {
-    // Detect timezone
-    let timezone = 'Asia/Makassar';
-    let locationInfo = '';
-    
-    if (user_location && user_location.lat && user_location.lng) {
-      timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
-      locationInfo = `\nUser coordinates: ${user_location.lat}, ${user_location.lng}`;
-    }
-
-    // Get current time
-    const timeInfo = getCurrentTimeInTimezone(timezone);
-    
-    return {
-      user_location,
-      timezone,
-      timeInfo,
-      user_name,
-      locationInfo
-    };
-  }
-
-  /**
-   * Check if response is complete
-   */
-  _isComplete(choice) {
-    return choice.finish_reason === 'stop' || !choice.message.tool_calls;
-  }
-
-  /**
-   * Check if choice has tool calls
-   */
-  _hasToolCalls(choice) {
-    return choice.finish_reason === 'tool_calls' && choice.message.tool_calls;
-  }
-
-  /**
-   * Build final successful response
-   */
-  _buildFinalResponse(choice, response, toolsCalled, toolResults, modelId) {
-    return {
-      message: choice.message.content,
-      toolsCalled: toolsCalled,
-      toolResults: toolResults,
-      model: modelId,
-      usage: response.usage
-    };
-  }
-
-  /**
-   * Build max iterations response
-   */
-  _buildMaxIterationsResponse(toolsCalled, toolResults, modelId) {
     return {
       message: 'Max iterations reached',
       toolsCalled: toolsCalled,

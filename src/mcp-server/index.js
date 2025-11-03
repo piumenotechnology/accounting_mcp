@@ -22,14 +22,6 @@ import { sendEmailTool } from './tools/email.tool.js';
 import { googleMapsTools } from './tools/maps.tools.js';
 import { googleMapsHandlers } from './handlers/maps.handlers.js';
 
-// ⭐ SECURE DATABASE TOOLS with access verification
-import { 
-  getUserSchemasTool,
-  getEnhancedSchemaStructureTool,
-  executeSQLQueryTool,
-  getQuickAnalyticsTool
-} from './tools/enhanced-dynamic-query.tool.js';
-
 // Create MCP server
 const server = new Server({
   name: 'multi-tool-server',
@@ -195,104 +187,6 @@ const TOOLS = [
       required: ['eventId']
     }
   },
-
-  // ⭐ SECURE DATABASE TOOLS WITH ACCESS CONTROL
-  {
-    name: 'list_data_sources',
-    description: '🔐 ALWAYS call this FIRST when user asks about revenue, expenses, profit, or any financial data. Returns list of data sources (schemas) that user has permission to access. Each schema represents a different company/client database.',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-
-  {
-    name: 'get_schema_structure',
-    description: '🔐 CALL THIS SECOND after list_data_sources. Verifies user access and returns table structure, columns, sample data, AND custom query instructions if available. CRITICAL: Always check "has_access" field - if false, user cannot query this schema.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name from list_data_sources (e.g., "xero_client_a")'
-        }
-      },
-      required: ['schema_name']
-    }
-  },
-
-  {
-    name: 'list_query_patterns',
-    description: '⭐ NEW: List available pre-built query patterns for a schema. Use this to discover shortcuts like "revenue_by_customer", "outstanding_invoices", "cash_flow". These are tested, optimized queries for common business questions.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name to check for patterns'
-        }
-      },
-      required: ['schema_name']
-    }
-  },
-
-  {
-    name: 'get_query_pattern',
-    description: '⭐ NEW: Get a specific pre-built query pattern. Returns ready-to-use SQL for common queries. You can modify the pattern (add WHERE clauses, change date ranges, etc.) before executing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name'
-        },
-        pattern_name: {
-          type: 'string',
-          description: 'Pattern name from list_query_patterns (e.g., "revenue_by_customer")'
-        }
-      },
-      required: ['schema_name', 'pattern_name']
-    }
-  },
-
-  {
-    name: 'execute_sql_query',
-    description: '🔐 SECURE: Execute SQL query with automatic access verification. CALL THIS THIRD after confirming schema access. User permissions are verified before executing ANY query. Returns query results or ACCESS_DENIED error. Only SELECT queries allowed.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name to query (must match schema from get_schema_structure)'
-        },
-        sql_query: {
-          type: 'string',
-          description: 'SQL SELECT query to execute. Must be valid SQL for the schema. Example: "SELECT SUM(total) FROM invoices WHERE date >= \'2024-01-01\'"'
-        }
-      },
-      required: ['schema_name', 'sql_query']
-    }
-  },
-
-  {
-    name: 'get_quick_analytics',
-    description: '🔐 SECURE: Get predefined analytics with access verification. Faster than execute_sql_query for common metrics. Available metrics: total_revenue, total_expenses, customer_count. Access is verified automatically.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name to query'
-        },
-        metric: {
-          type: 'string',
-          enum: ['total_revenue', 'total_expenses', 'customer_count'],
-          description: 'Predefined metric to calculate'
-        }
-      },
-      required: ['schema_name', 'metric']
-    }
-  },
   
   ...googleMapsTools
 ];
@@ -412,80 +306,14 @@ const toolHandlers = {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
   },
-
-  // ⭐ SECURE DATABASE HANDLERS WITH ACCESS CONTROL
-  list_data_sources: async (args) => {
-    const { user_id } = args;
-    console.error(`⚡ MCP: Listing data sources for user: ${user_id}`);
-    const result = await getUserSchemasTool({ userId: user_id });
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  get_schema_structure: async (args) => {
-    const { user_id, schema_name } = args;
-    console.error(`⚡ MCP: 🔐 Verifying access and getting schema: ${schema_name}`);
-    
-    const result = await getEnhancedSchemaStructureTool({
-      userId: user_id,
-      schemaName: schema_name
-    });
-    
-    // Log access result
-    if (result.has_access) {
-      console.error(`✅ Access granted: ${user_id} → ${schema_name}`);
-    } else {
-      console.error(`❌ Access denied: ${user_id} → ${schema_name}`);
-    }
-    
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  execute_sql_query: async (args) => {
-    const { user_id, schema_name, sql_query } = args;
-    console.error(`⚡ MCP: 🔐 Executing query with access verification`);
-    console.error(`   User: ${user_id}, Schema: ${schema_name}`);
-    
-    const result = await executeSQLQueryTool({
-      userId: user_id,
-      schemaName: schema_name,
-      sqlQuery: sql_query
-    });
-    
-    if (!result.has_access) {
-      console.error(`❌ Query blocked: User ${user_id} lacks access to ${schema_name}`);
-    } else if (result.success) {
-      console.error(`✅ Query executed: ${result.row_count} rows returned`);
-    } else {
-      console.error(`⚠️ Query failed: ${result.error}`);
-    }
-    
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  get_quick_analytics: async (args) => {
-    const { user_id, schema_name, metric } = args;
-    console.error(`⚡ MCP: 🔐 Getting analytics: ${metric} from ${schema_name}`);
-    
-    const result = await getQuickAnalyticsTool({
-      userId: user_id,
-      schemaName: schema_name,
-      metric: metric
-    });
-    
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-  
   
   ...googleMapsHandlers
 };
+
+// Handle tools/call request
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools: TOOLS };
+});
 
 // Handle tools/call request
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
