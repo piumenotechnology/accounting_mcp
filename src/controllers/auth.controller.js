@@ -64,6 +64,8 @@ export const auth = {
       const refreshToken = generateRefreshToken();
       await tokenModel.createRefreshToken(user.id, refreshToken, 30);
 
+      let cekGoogleConnectedValid = true;
+
       const googleToken = await getTokens(user.id);
       if (googleToken && googleToken.access_token && !googleToken.refresh_token) {
         try {
@@ -80,6 +82,7 @@ export const auth = {
 
           // ✅ Only delete tokens if revoke succeeded
           await deleteTokens(user.id);
+          cekGoogleConnectedValid = false;
 
         } catch (revokeError) {
           console.warn('⚠️ Token revoke warning:', revokeError.message);
@@ -88,7 +91,7 @@ export const auth = {
 
       // const referral = await referralModels.getReferralUsageByUser(user.id)
       // const tableScope = await referralModels.getScope(user.id)
-      const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+      // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
             
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
