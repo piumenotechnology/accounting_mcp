@@ -25,6 +25,7 @@ export class ModelSelector {
     
     // Default models
     this.defaultModel = 'claude';  // Claude for general queries
+    // this.defaultModel = 'grock'; // Grock for general queries (to optimize cost)
     this.googleModel = 'gemini';   // Gemini for Google services
   }
   

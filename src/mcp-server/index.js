@@ -22,6 +22,9 @@ import { sendEmailTool } from './tools/email.tool.js';
 import { googleMapsTools } from './tools/maps.tools.js';
 import { googleMapsHandlers } from './handlers/maps.handlers.js';
 
+// Database tool
+import { executeQueryTool } from './tools/database.tool.js';
+
 // Create MCP server
 const server = new Server({
   name: 'multi-tool-server',
@@ -187,6 +190,31 @@ const TOOLS = [
       required: ['eventId']
     }
   },
+  // Database query execution tool
+  {
+    name: 'execute_query',
+    description: 'Execute a SELECT query on a database schema. Schema structure is provided in the system message.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: { 
+          type: 'string', 
+          description: 'Schema name (from system message)' 
+        },
+        query: { 
+          type: 'string', 
+          description: 'SELECT query to execute' 
+        },
+        params: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Query parameters for $1, $2, etc.',
+          default: []
+        }
+      },
+      required: ['schema_name', 'query']
+    }
+  },
   
   ...googleMapsTools
 ];
@@ -302,6 +330,22 @@ const toolHandlers = {
       userId: user_id, 
       ...eventData 
     });
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  execute_query: async (args) => {
+    const { user_id, schema_name, query, params = [] } = args;
+    console.error(`⚡ MCP: Executing query on ${schema_name} for user: ${user_id}`);
+    
+    const result = await executeQueryTool({
+      userId: user_id,
+      schema_name,
+      query,
+      params
+    });
+    
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };

@@ -12,5 +12,4 @@ router.get('/:referral_id', requireAuth, ctrl.getReferralById); // get referral 
 router.get('/', ctrl.getReferrals);             // list referrals
 router.delete('/:referral_id', requireAuth, ctrl.deleteReferral); // delete referral
 
-
 export default router;

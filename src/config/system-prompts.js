@@ -258,7 +258,138 @@ CONTEXT TRACKING:
 - If user selected a contact from email search, and original action was calendar event, 
   create CALENDAR EVENT with that contact
 - Do NOT switch to email mid-conversation
-`
+  `,
+
+  DATABASE: (databaseContext) => {
+    const { schemas, structures } = databaseContext;
+    
+    let schemaDoc = '';
+    
+    for (const schema of schemas) {
+      const structure = structures[schema.schema_name];
+      
+      schemaDoc += `\n### ${schema.schema_name} (${schema.client_name})`;
+      if (schema.referral) {
+        schemaDoc += ` [Ref: ${schema.referral}]`;
+      }
+      schemaDoc += '\n';
+      
+      if (structure) {
+        for (const table of structure) {
+          schemaDoc += `\n**${table.table_name}:**\n`;
+          
+          let columnsArray = table.columns;
+          if (typeof columnsArray === 'string') {
+            try {
+              columnsArray = JSON.parse(columnsArray);
+            } catch (e) {
+              columnsArray = [];
+            }
+          }
+          
+          const columns = columnsArray.map(c => 
+            `  - ${c.name} (${c.type})${c.nullable ? '' : ' NOT NULL'}`
+          ).join('\n');
+          
+          schemaDoc += columns + '\n';
+        }
+      }
+    }
+    
+    return `
+    ═══════════════════════════════════════════════════════════════
+    DATABASE QUERY TOOLS
+    ═══════════════════════════════════════════════════════════════
+
+    You have FULL ACCESS to query the following databases. This is REAL DATA that you CAN query.
+    ${schemaDoc}
+
+    CRITICAL UNDERSTANDING:
+    - These tables contain the user's actual transaction and payment data
+    - contact_name = store/supplier/vendor names (e.g., "Waitrose", "Tesco", "Amazon")
+    - You CAN and SHOULD query this data when asked about payments, transactions, or spending
+    - This is NOT hypothetical - this is the user's real financial data
+
+    COMMON QUERY PATTERNS:
+
+    1. "How much did I pay [company name]?"
+      → Query payment_xero or bank_transaction WHERE contact_name ILIKE '%company%'
+      
+    2. "How much did I spend at [store]?"
+      → SUM(total) or SUM(line_amount) WHERE contact_name ILIKE '%store%'
+      
+    3. "Show transactions for [vendor]"
+      → SELECT * FROM bank_transaction WHERE contact_name ILIKE '%vendor%'
+      
+    4. "Total payments to [supplier]"
+      → SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE '%supplier%'
+
+    QUERY BUILDING RULES:
+    ✅ ALWAYS use ILIKE for matching names (case-insensitive: ILIKE '%waitrose%')
+    ✅ Use parameterized queries ($1, $2) for user input
+    ✅ Look in both payment_xero and bank_transaction tables for payment data
+    ✅ Use SUM() for totals, COUNT() for counts
+    ✅ Filter by date when relevant
+    ✅ Join tables when needed to get complete information
+
+    ❌ NEVER say "I don't have access" - YOU DO! Query the database!
+    ❌ NEVER ask user to check bank statements - query the data first!
+    ❌ Don't make excuses - if data exists in the schema, query it!
+
+    SPECIFIC EXAMPLES FOR THIS USER:
+
+    Example 1: "How much did I pay Waitrose?"
+    → execute_query({
+        schema_name: '${schemas[0]?.schema_name}',
+        query: \`
+          SELECT 
+            SUM(total) as total_paid,
+            COUNT(*) as transaction_count
+          FROM payment_xero 
+          WHERE contact_name ILIKE $1
+        \`,
+        params: ['%waitrose%']
+      })
+
+    Example 2: "Show me all Waitrose transactions"
+    → execute_query({
+        schema_name: '${schemas[0]?.schema_name}',
+        query: \`
+          SELECT 
+            date,
+            description,
+            line_amount,
+            reference
+          FROM bank_transaction
+          WHERE contact_name ILIKE $1
+          ORDER BY date DESC
+        \`,
+        params: ['%waitrose%']
+      })
+
+    Example 3: "How much did I spend at Waitrose this month?"
+    → execute_query({
+        schema_name: '${schemas[0]?.schema_name}',
+        query: \`
+          SELECT 
+            SUM(total) as total_spent,
+            COUNT(*) as transactions
+          FROM payment_xero
+          WHERE contact_name ILIKE $1
+            AND date >= DATE_TRUNC('month', CURRENT_DATE)
+        \`,
+        params: ['%waitrose%']
+      })
+
+    RESPONSE FORMAT:
+    1. Query the database immediately - don't ask for clarification first
+    2. If no results found, say "No transactions found for [name]"
+    3. If results found, show the amount and count clearly
+    4. Offer to show details if user wants more info
+
+    Remember: You HAVE the data. You CAN query it. Do it!
+    `;
+  }
 };
 
 /**
@@ -312,10 +443,23 @@ export const PromptDetector = {
     return keywords.some(kw => lowerMessage.includes(kw));
   },
 
+  needsDatabaseTools(message) {
+    const keywords = [
+      'show', 'show me', 'get', 'find', 'search', 'list', 'display',
+      'how much', 'how many', 'count', 'total', 'sum', 'average',
+      'pay', 'paid', 'spend', 'spent', 'cost', 'price',
+      'customer', 'order', 'invoice', 'sales', 'product',
+      'payment', 'transaction', 'purchase', 'store', 'supplier'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    return keywords.some(kw => lowerMessage.includes(kw));
+  },
+
   /**
    * Filter tools based on what's needed
    */
-  filterRelevantTools(allTools, message, needsLocation, needsEmail, needsCalendar) {
+  filterRelevantTools(allTools, message, needsLocation, needsEmail, needsCalendar, needsDatabase) {
     return allTools.filter(tool => {
       const toolName = tool.function.name;
       
@@ -341,6 +485,10 @@ export const PromptDetector = {
       // Email/contact tools
       if (['search_contact', 'send_email'].includes(toolName)) {
         return needsEmail;
+      }
+
+      if (toolName === 'execute_query') {
+        return needsDatabase;
       }
       
       return false;

@@ -4,12 +4,113 @@ import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
 import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
 import { PROMPTS, PromptDetector } from '../config/system-prompts.js';
+import { pool } from '../config/db.js';
 
 class AIOrchestrator {
   constructor() {
     this.mcpClient = new MCPClient();
     this.modelSelector = new ModelSelector();
     this.client = openRouterClient;
+
+    this.schemaCache = new Map(); //new schema cache
+  }
+
+  getSchemaFromCache(user_id, schema_name) {
+    const key = `${user_id}:${schema_name}`;
+    const cached = this.schemaCache.get(key);
+    
+    if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+      console.log(`📦 Using cached schema: ${schema_name}`);
+      return cached.data;
+    }
+    
+    return null;
+  }
+
+  cacheSchema(user_id, schema_name, data) {
+    const key = `${user_id}:${schema_name}`;
+    this.schemaCache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+    console.log(`💾 Cached schema: ${schema_name}`);
+  }
+
+  async fetchSchemaStructure(user_id, schema_name) {
+    // Check access
+    const accessCheck = await pool.query(
+      'SELECT user_has_schema_access($1, $2) as has_access',
+      [user_id, schema_name]
+    );
+    
+    if (!accessCheck.rows[0].has_access) {
+      return null;
+    }
+    
+    // Get structure
+    const structure = await pool.query(`
+      SELECT 
+        t.table_name,
+        json_agg(
+          json_build_object(
+            'name', c.column_name,
+            'type', c.data_type,
+            'nullable', c.is_nullable = 'YES'
+          ) ORDER BY c.ordinal_position
+        ) as columns
+      FROM information_schema.tables t
+      JOIN information_schema.columns c 
+        ON t.table_name = c.table_name 
+        AND t.table_schema = c.table_schema
+      WHERE t.table_schema = $1
+        AND t.table_type = 'BASE TABLE'
+      GROUP BY t.table_name
+      ORDER BY t.table_name
+    `, [schema_name]);
+    
+    return structure.rows;
+  }
+
+  async getDatabaseContext(user_id) {
+    try {
+      // 1. Get user's schemas
+      const schemasResult = await pool.query(
+        'SELECT * FROM get_user_schemas($1)',
+        [user_id]
+      );
+      
+      const schemas = schemasResult.rows;
+      
+      if (schemas.length === 0) {
+        return null;
+      }
+      
+      // 2. Get structure for each schema (cached!)
+      const structures = {};
+      
+      for (const schema of schemas) {
+        const cachedStructure = this.getSchemaFromCache(user_id, schema.schema_name);
+        
+        if (cachedStructure) {
+          structures[schema.schema_name] = cachedStructure;
+        } else {
+          const structure = await this.fetchSchemaStructure(user_id, schema.schema_name);
+          if (structure) {
+            structures[schema.schema_name] = structure;
+            this.cacheSchema(user_id, schema.schema_name, structure);
+          }
+        }
+      }
+      
+      return {
+        schemas,
+        structures
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to get database context:', error);
+      return null;
+    }
   }
   
   async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null, user_name) {
@@ -95,11 +196,25 @@ class AIOrchestrator {
     const needsLocation = user_location && PromptDetector.needsLocationTools(message);
     const needsEmail = PromptDetector.needsEmailTools(message);
     const needsCalendar = PromptDetector.needsCalendarTools(message);
-    
+    //new database context detection
+    const needsDatabase = PromptDetector.needsDatabaseTools(message);
+
     console.log('🎯 Prompt optimization:');
     console.log(`   Location prompt: ${needsLocation ? '✅' : '❌'}`);
     console.log(`   Email prompt: ${needsEmail ? '✅' : '❌'}`);
     console.log(`   Calendar prompt: ${needsCalendar ? '✅' : '❌'}`);
+    console.log(`   Database: ${needsDatabase ? '✅' : '❌'}`);
+
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🚀 NEW: Pre-load database context if needed
+    // ═══════════════════════════════════════════════════════════════
+  
+    let databaseContext = null;
+    
+    if (needsDatabase) {
+      databaseContext = await this.getDatabaseContext(user_id);
+    }
     
     // ═══════════════════════════════════════════════════════════════
     // 🧩 Build modular system prompt (only include what's needed)
@@ -118,6 +233,10 @@ class AIOrchestrator {
     if (needsCalendar) {
       systemContent += '\n\n' + PROMPTS.CALENDAR(timezone);
     }
+
+    if (needsDatabase && databaseContext) {
+      systemContent += '\n\n' + PROMPTS.DATABASE(databaseContext);
+    }
     
     // Calculate token estimate (rough: 1 token ≈ 4 chars)
     const estimatedTokens = Math.ceil(systemContent.length / 4);
@@ -132,7 +251,8 @@ class AIOrchestrator {
       message, 
       needsLocation, 
       needsEmail, 
-      needsCalendar
+      needsCalendar,
+      needsDatabase //new parameter
     );
     
     console.log(`🔧 Tools filtered: ${relevantTools.length}/${tools.length} included`);
@@ -171,6 +291,12 @@ class AIOrchestrator {
       
       const choice = response.choices[0];
       console.log(`🤖 Finish reason: ${choice.finish_reason}`);
+
+      if (choice.message.tool_calls) {
+        console.log(`🔧 AI wants to call tools:`, choice.message.tool_calls.map(t => t.function.name));
+      } else {
+        console.log(`💬 AI responded without tools:`, choice.message.content?.substring(0, 100));
+      }
       
       // No tool calls - return final answer
       if (choice.finish_reason === 'stop' || !choice.message.tool_calls) {
@@ -217,6 +343,7 @@ class AIOrchestrator {
           'check_google_connection',
           'search_contact',
           'send_email',
+          'execute_query',
         ];
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
@@ -271,11 +398,17 @@ class AIOrchestrator {
         // Add assistant message with tool call
         messages.push(choice.message);
         
-        // Add tool result
+        // // Add tool result
+        // messages.push({
+        //   role: 'tool',
+        //   tool_call_id: toolCall.id,
+        //   content: JSON.stringify(toolResult.content)
+        // });
+
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(toolResult.content)
+          content: toolResult.content?.[0]?.text || JSON.stringify(toolResult)
         });
         
         continue;

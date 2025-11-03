@@ -36,6 +36,13 @@ export const models = {
     cost: 'FREE',
     provider: 'openrouter'
   },
+  grock: {
+    id: 'x-ai/grok-4-fast',
+    name: 'Grok 4 Fast',
+    strengths: 'General purpose tasks',
+    cost: '$',  
+    provider: 'openrouter'
+  }
 };
 
 // Check if OpenRouter is configured
