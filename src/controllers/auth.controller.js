@@ -10,7 +10,7 @@ import {
 
 import { tokenModel } from '../models/token.model.js';
 import { getTokens, deleteTokens } from '../models/google.model.js';
-// import { referralModels } from '../models/referral.models.js';
+import { referralModels } from '../models/referral.models.js';
 import { isGoogleStillConnected } from '../services/google-connection.js';
 import { upsertTokens } from '../models/google.model.js';
 
@@ -89,16 +89,13 @@ export const auth = {
         }
       }
 
-      // const referral = await referralModels.getReferralUsageByUser(user.id)
-      // const tableScope = await referralModels.getScope(user.id)
-      // const cekGoogleConnectedValid = await isGoogleStillConnected(user.id);
+      const referral = await referralModels.getReferralUsageByUser(user.id);
             
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
         token,
         refreshToken,
-        // referral,
-        // scopes: tableScope,
+        referral,
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 
