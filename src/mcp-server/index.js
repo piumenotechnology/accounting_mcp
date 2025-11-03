@@ -222,6 +222,40 @@ const TOOLS = [
   },
 
   {
+    name: 'list_query_patterns',
+    description: '⭐ NEW: List available pre-built query patterns for a schema. Use this to discover shortcuts like "revenue_by_customer", "outstanding_invoices", "cash_flow". These are tested, optimized queries for common business questions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name to check for patterns'
+        }
+      },
+      required: ['schema_name']
+    }
+  },
+
+  {
+    name: 'get_query_pattern',
+    description: '⭐ NEW: Get a specific pre-built query pattern. Returns ready-to-use SQL for common queries. You can modify the pattern (add WHERE clauses, change date ranges, etc.) before executing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schema_name: {
+          type: 'string',
+          description: 'Schema name'
+        },
+        pattern_name: {
+          type: 'string',
+          description: 'Pattern name from list_query_patterns (e.g., "revenue_by_customer")'
+        }
+      },
+      required: ['schema_name', 'pattern_name']
+    }
+  },
+
+  {
     name: 'execute_sql_query',
     description: '🔐 SECURE: Execute SQL query with automatic access verification. CALL THIS THIRD after confirming schema access. User permissions are verified before executing ANY query. Returns query results or ACCESS_DENIED error. Only SELECT queries allowed.',
     inputSchema: {
@@ -448,6 +482,7 @@ const toolHandlers = {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
   },
+  
   
   ...googleMapsHandlers
 };
