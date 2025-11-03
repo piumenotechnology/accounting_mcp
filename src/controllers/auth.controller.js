@@ -151,7 +151,7 @@ export const auth = {
       // rotate
       await tokenModel.revokeRefreshTokenById(row.id);
 
-      const user = await authModels.getUserById(row.user_id);
+      const user = await authModels.getUserByid(row.user_id);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const newAccess = generateToken(user);
