@@ -372,13 +372,13 @@ class AIOrchestrator {
         });
 
         // Safe result preview
-        try {
-          const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
-          const preview = resultText.substring(0, 200);
-          console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
-        } catch (err) {
-          console.log(`✅ Tool result received (preview failed):`, err.message);
-        }
+        // try {
+        //   const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
+        //   const preview = resultText.substring(0, 200);
+        //   console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
+        // } catch (err) {
+        //   console.log(`✅ Tool result received (preview failed):`, err.message);
+        // }
 
         // Store tool results for structured data
         try {
@@ -396,7 +396,22 @@ class AIOrchestrator {
         }
         
         // Add assistant message with tool call
-        messages.push(choice.message);
+        // messages.push(choice.message);
+
+        let toolResultContent;
+  
+        if (toolResult.content && Array.isArray(toolResult.content)) {
+          // MCP format: { content: [{ type: 'text', text: '...' }] }
+          toolResultContent = toolResult.content[0]?.text || JSON.stringify(toolResult.content);
+        } else if (typeof toolResult === 'string') {
+          // Already a string
+          toolResultContent = toolResult;
+        } else {
+          // Fallback: stringify the whole thing
+          toolResultContent = JSON.stringify(toolResult);
+        }
+        
+        console.log(`📤 Sending tool result (${toolResultContent.length} chars)`);
         
         // // Add tool result
         // messages.push({
@@ -406,10 +421,33 @@ class AIOrchestrator {
         // });
 
         messages.push({
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: toolCall.id,
+            type: 'function',
+            function: {
+              name: toolCall.function.name,
+              arguments: toolCall.function.arguments
+            }
+          }]
+        });
+        
+        messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: toolResult.content?.[0]?.text || JSON.stringify(toolResult)
+          content: toolResultContent
         });
+
+        try {
+          const parsedResult = JSON.parse(toolResultContent);
+          toolResults.push({
+            tool: toolCall.function.name,
+            data: parsedResult
+          });
+        } catch (parseErr) {
+          console.log('⚠️ Could not parse tool result for structured data');
+        }
         
         continue;
       }

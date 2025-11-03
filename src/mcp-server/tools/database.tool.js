@@ -27,6 +27,16 @@ export async function executeQueryTool({ userId, schema_name, query, params = []
   // 3. Add safety limits
   const safeQuery = QueryValidator.addSafetyLimits(query);
   
+  // ✅ ADD THIS: Log the query before execution
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error('📊 DATABASE QUERY EXECUTION');
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error(`👤 User ID: ${userId}`);
+  console.error(`🗄️  Schema: ${schema_name}`);
+  console.error(`📝 Query:\n${safeQuery}`);
+  console.error(`📌 Params: ${JSON.stringify(params)}`);
+  console.error('═══════════════════════════════════════════════════════════');
+  
   // 4. Execute with schema isolation
   const client = await db.connect();
   
@@ -40,6 +50,13 @@ export async function executeQueryTool({ userId, schema_name, query, params = []
     
     await client.query('COMMIT');
     
+    // ✅ ADD THIS: Log the result
+    console.error('✅ Query executed successfully');
+    console.error(`   Rows returned: ${result.rowCount}`);
+    console.error(`   Execution time: ${executionTime}ms`);
+    console.error(`   Sample result: ${JSON.stringify(result.rows[0] || {}, null, 2)}`);
+    console.error('═══════════════════════════════════════════════════════════\n');
+    
     return {
       schema_name,
       query: safeQuery,
@@ -50,6 +67,12 @@ export async function executeQueryTool({ userId, schema_name, query, params = []
     
   } catch (error) {
     await client.query('ROLLBACK');
+    
+    // ✅ ADD THIS: Log the error
+    console.error('❌ Query execution failed');
+    console.error(`   Error: ${error.message}`);
+    console.error('═══════════════════════════════════════════════════════════\n');
+    
     return {
       error: error.message,
       query: safeQuery,
