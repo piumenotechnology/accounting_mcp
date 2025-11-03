@@ -1,72 +1,51 @@
-// src/services/ai-orchestrator.js
+// src/services/ai-orchestrator.js - REFACTORED VERSION
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
 import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
+
+// Modular imports
+import { SystemPromptBuilder } from './prompts/system-prompt-builder.js';
+import { ToolConfig } from './config/tool-config.js';
+import { ConversationManager } from './utils/conversation-manager.js';
+import { ToolExecutor } from './utils/tool-executor.js';
 
 class AIOrchestrator {
   constructor() {
     this.mcpClient = new MCPClient();
     this.modelSelector = new ModelSelector();
     this.client = openRouterClient;
+    this.promptBuilder = new SystemPromptBuilder();
+    this.toolExecutor = new ToolExecutor(this.mcpClient);
   }
   
-  async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null, user_name ) {
-    if (!isConfigured) {
-      throw new Error('OpenRouter API key not configured');
-    }
+  /**
+   * Main entry point for processing messages
+   */
+  async processMessage(
+    message, 
+    user_id, 
+    requestedModel = null, 
+    conversationHistory = [], 
+    user_location = null, 
+    user_name
+  ) {
+    // Validate inputs
+    this._validateInputs(user_id);
     
-    if (!user_id) {
-      throw new Error('user_id is required');
-    }
+    // Select model
+    const selectedModel = this._selectModel(message, requestedModel);
+    const modelConfig = this._getModelConfig(selectedModel);
     
-    // Step 1: Determine which model to use
-    let selectedModel;
-    if (requestedModel) {
-      // User explicitly requested a model
-      selectedModel = requestedModel;
-      console.log(`🎯 Using user-requested model: ${requestedModel}`);
-    } else {
-      // Auto-select based on query type
-      selectedModel = this.modelSelector.selectModel(message);
-      const reasoning = this.modelSelector.getModelReasoning(message);
-      console.log(`🤖 Auto-selected: ${selectedModel}`);
-      console.log(`   Reason: ${reasoning.reason}`);
-      if (reasoning.keywords.length > 0) {
-        console.log(`   Keywords detected: ${reasoning.keywords.join(', ')}`);
-      }
-    }
+    // Log processing info
+    this._logProcessingInfo(modelConfig, user_id, conversationHistory, user_location);
     
-    const modelConfig = models[selectedModel];
-    
-    if (!modelConfig) {
-      throw new Error(`Unknown model: ${selectedModel}`);
-    }
-    
-    console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
-    console.log(`   User: ${user_id}`);
-    console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
-    if (user_location) {
-      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
-    }
-    
-    // Step 2: Get MCP tools
+    // Initialize MCP tools
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
+    const tools = this._convertMCPToolsToOpenAI(mcpTools);
     
-    console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
-    
-    // Step 3: Convert MCP tools to OpenAI format
-    const tools = mcpTools.tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema
-      }
-    }));
-    
-    // Step 4: Process with OpenRouter (pass location)
+    // Process with OpenRouter
     return await this.processWithOpenRouter(
       message, 
       user_id, 
@@ -78,691 +57,55 @@ class AIOrchestrator {
     );
   }
   
-  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null, user_name ) {
-    // Detect timezone from user location
-    let timezone = 'Asia/Makassar';
-    let locationInfo = '';
+  /**
+   * Process message with OpenRouter API
+   */
+  async processWithOpenRouter(
+    message, 
+    user_id, 
+    modelId, 
+    tools, 
+    conversationHistory = [], 
+    user_location = null, 
+    user_name
+  ) {
+    // Build context
+    const context = this._buildContext(user_location, user_name);
     
-    if (user_location && user_location.lat && user_location.lng) {
-      timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
-      locationInfo = `\nUser coordinates: ${user_location.lat}, ${user_location.lng}`;
-    }
-
-    // Get current time in user's timezone
-    const timeInfo = getCurrentTimeInTimezone(timezone);
+    // Build system message using modular prompt builder
+    const systemMessage = this.promptBuilder.build(context);
     
-    // Build system message with confirmation rules
-    const systemMessage = {
-      role: 'system',
-      content: `${user_location ? `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔴 CRITICAL: USER LOCATION IS AVAILABLE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current Location: ${user_location.lat}, ${user_location.lng}
-
-For ANY location/maps query, use these coordinates as origin/starting point.
-❌ NEVER ask: "Where are you?", "What's your starting point?", "I need your location"
-✅ ALWAYS use the coordinates above automatically
-
-EXAMPLES OF CORRECT USAGE:
-• User: "how do I get to airport?" 
-  → Call: get_directions(origin: user_location, destination: "airport")
-  
-• User: "how far is the stadium?"
-  → Call: calculate_distance(origin: user_location, destination: "stadium")
-  
-• User: "find gyms near me"
-  → Call: search_places(location: user_location, query: "gym")
-
-• User: "how long to Ubud?"
-  → Call: get_directions(origin: user_location, destination: "Ubud")
-
-DO NOT respond with "I need your starting point" - USE THE LOCATION ABOVE!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-` : ''}Current date and time information:
-- Date: ${timeInfo.localDate}
-- Time: ${timeInfo.localTime}
-- Timezone: ${timezone}
-- ISO format: ${timeInfo.iso}${locationInfo}
-
-USER INFORMATION:
-- User name: ${user_name}
-
-EMAIL SIGNATURE:
-When sending emails, ALWAYS sign with the user's name:
-"Best regards,
-${user_name}"
-
-NEVER use "[Your Name]" or placeholder text.
-ALWAYS use the actual user name above.
-
-═══════════════════════════════════════════════════════════════
-DATABASE QUERYING - ENHANCED WORKFLOW (CRITICAL!)
-═══════════════════════════════════════════════════════════════
-
-🚨 CRITICAL: NEVER GUESS TABLE OR COLUMN NAMES!
-Always discover structure first, then check for custom patterns.
-
-MANDATORY 4-STEP PROCESS FOR CUSTOM-CONFIGURED SCHEMAS:
-
-┌─────────────────────────────────────────────────────────────┐
-│ STEP 1: DISCOVER AVAILABLE DATA SOURCES                     │
-└─────────────────────────────────────────────────────────────┘
-
-When user asks about financial/business data, ALWAYS start with:
-
-list_data_sources()
-
-Returns:
-{
-  "schemas": [
-    {
-      "schema_name": "xero_client_a",
-      "company_name": "ABC Corp",
-      "source": "xero"
-    }
-  ]
-}
-
-┌─────────────────────────────────────────────────────────────┐
-│ STEP 2: GET SCHEMA STRUCTURE (WITH CUSTOM CONFIG CHECK)     │
-└─────────────────────────────────────────────────────────────┘
-
-Call: get_schema_structure(schema_name: "xero_client_a")
-
-Returns:
-{
-  "success": true,
-  "schema_name": "xero_client_a",
-  "display_name": "ABC Corp",
-  "source": "xero",
-  "has_custom_config": true,  // ⭐ KEY FLAG!
-  "custom_instructions": "...", // ⭐ READ THIS!
-  "available_patterns": ["revenue", "revenue_by_customer", "outstanding_invoices"],
-  "structure": { ... },
-  "message": "⭐ This schema has CUSTOM CONFIGURATION..."
-}
-
-🔴 CRITICAL CHECK:
-IF has_custom_config === true:
-  → READ custom_instructions CAREFULLY
-  → These contain:
-    • Pre-built query patterns (tested and optimized)
-    • Important table relationships (JOINs you must use)
-    • Business rules (how to calculate profit, etc.)
-    • Data quality notes (NULL handling, date formats)
-  
-  → NEXT: Check available_patterns array
-  → If user's question matches a pattern, USE IT instead of writing from scratch
-
-┌─────────────────────────────────────────────────────────────┐
-│ STEP 3: USE PRE-BUILT PATTERNS (if available)               │
-└─────────────────────────────────────────────────────────────┘
-
-If schema has custom config and user asks a common question:
-
-Example: User asks "What's my revenue by customer?"
-
-You see available_patterns includes: "revenue_by_customer"
-
-INSTEAD of writing query from scratch:
-
-✅ CORRECT APPROACH:
-Call: get_query_pattern(
-  schema_name: "xero_client_a",
-  pattern_name: "revenue_by_customer"
-)
-
-Returns:
-{
-  "success": true,
-  "pattern_name": "revenue_by_customer",
-  "sql": "
-    SELECT 
-      c.name as customer,
-      SUM(pl.amount) as total_revenue,
-      COUNT(*) as transaction_count
-    FROM pl_xero pl
-    JOIN contacts c ON pl.contact_id = c.id
-    WHERE pl.type = 'Revenue'
-    GROUP BY c.name
-    ORDER BY total_revenue DESC
-  ",
-  "message": "Use this as template. Modify as needed."
-}
-
-NOW you can:
-• Use it as-is
-• Add WHERE clauses for date filtering
-• Add LIMIT for top N results
-• Modify to fit exact user question
-
-Example modifications:
-"Top 5 customers this year?"
-→ Add: AND pl.date >= '2025-01-01' LIMIT 5
-
-"Customers with revenue over $10k?"
-→ Add: HAVING SUM(pl.amount) > 10000
-
-┌─────────────────────────────────────────────────────────────┐
-│ STEP 4: EXECUTE QUERY                                       │
-└─────────────────────────────────────────────────────────────┘
-
-Execute with execute_sql_query:
-
-execute_sql_query(
-  schema_name: "xero_client_a",
-  sql: "[your modified pattern or custom query]"
-)
-
-═══════════════════════════════════════════════════════════════
-DECISION TREE: WHICH APPROACH TO USE?
-═══════════════════════════════════════════════════════════════
-
-START HERE
-    ↓
-Call list_data_sources
-    ↓
-Call get_schema_structure
-    ↓
-CHECK: has_custom_config?
-    ↓
-┌───YES──────────────────────────────────────────┐
-│                                                 │
-│ 1. READ custom_instructions                    │
-│ 2. CHECK available_patterns                    │
-│ 3. Does user question match a pattern?         │
-│    ↓                                            │
-│    YES → get_query_pattern → modify → execute  │
-│    NO  → Write custom query following          │
-│           custom_instructions rules            │
-│                                                 │
-└─────────────────────────────────────────────────┘
+    // Build messages array
+    let messages = ConversationManager.buildMessages(
+      systemMessage,
+      message,
+      conversationHistory
+    );
     
-┌───NO───────────────────────────────────────────┐
-│                                                 │
-│ 1. Study structure and sample_data             │
-│ 2. Write query using exact names               │
-│ 3. Execute                                      │
-│                                                 │
-└─────────────────────────────────────────────────┘
-
-═══════════════════════════════════════════════════════════════
-PATTERN MATCHING EXAMPLES
-═══════════════════════════════════════════════════════════════
-
-User query → Check for these patterns:
-
-"What's my revenue?"
-→ Pattern: "revenue"
-
-"Show me revenue by customer" / "Which customers bring most revenue?"
-→ Pattern: "revenue_by_customer"
-
-"What invoices are outstanding?" / "Who owes me money?"
-→ Pattern: "outstanding_invoices"
-
-"Show me cash flow" / "Money in vs money out?"
-→ Pattern: "cash_flow"
-
-"Top expenses?" / "Where am I spending most?"
-→ Pattern: "top_expenses" or "expenses_by_category"
-
-"How long do customers take to pay?"
-→ Pattern: "customer_payment_behavior"
-
-═══════════════════════════════════════════════════════════════
-CUSTOM QUERY WRITING (No patterns available)
-═══════════════════════════════════════════════════════════════
-
-If no pattern matches OR schema has no custom config:
-
-1. Study the structure from get_schema_structure
-2. Examine sample_data to understand:
-   • Which columns have the data you need
-   • Value formats (positive/negative, date format)
-   • NULL handling needs
-3. Check custom_instructions for:
-   • Required JOINs (don't forget foreign keys!)
-   • Business rules (how to calculate metrics)
-   • Data quality issues
-4. Write query using EXACT names
-5. Test with simple query first if complex
-
-Example - Complex join from custom_instructions:
-
-custom_instructions says:
-"Revenue by customer requires JOIN to contacts table:
- pl_xero.contact_id → contacts.id"
-
-So your query MUST include:
-FROM pl_xero pl
-JOIN contacts c ON pl.contact_id = c.id
-
-❌ WRONG (missing join):
-SELECT account_name, SUM(amount)
-FROM pl_xero
-WHERE type = 'Revenue'
-
-✅ CORRECT (has join):
-SELECT c.name, SUM(pl.amount)
-FROM pl_xero pl
-JOIN contacts c ON pl.contact_id = c.id
-WHERE pl.type = 'Revenue'
-GROUP BY c.name
-
-═══════════════════════════════════════════════════════════════
-OPTIMIZATION: LIST PATTERNS EARLY
-═══════════════════════════════════════════════════════════════
-
-For exploratory questions, you can call:
-
-list_query_patterns(schema_name: "xero_client_a")
-
-Returns:
-{
-  "available_patterns": [
-    "revenue",
-    "revenue_by_customer", 
-    "outstanding_invoices",
-    "cash_flow",
-    "top_expenses"
-  ],
-  "message": "5 pre-configured patterns available"
-}
-
-Then suggest to user:
-"I can show you: revenue totals, revenue by customer, outstanding 
-invoices, cash flow, or top expenses. Which would you like?"
-
-═══════════════════════════════════════════════════════════════
-MEMORY & CACHING
-═══════════════════════════════════════════════════════════════
-
-REMEMBER IN CONVERSATION:
-• Schema structure (don't re-fetch)
-• Custom instructions (don't re-read)
-• Available patterns (already know them)
-
-Example conversation:
-User: "What's my revenue?"
-You: [list_data_sources → get_schema_structure → sees custom config
-      → get_query_pattern "revenue" → execute] ✅
-Response: "$145,230"
-
-User: "What about by customer?"
-You: [Use cached structure, already know pattern exists
-      → get_query_pattern "revenue_by_customer" → execute] ✅
-Response: [customer breakdown]
-
-User: "Just the top 3"
-You: [Use same pattern, add LIMIT 3 → execute] ✅
-
-═══════════════════════════════════════════════════════════════
-ERROR HANDLING
-═══════════════════════════════════════════════════════════════
-
-If pattern not found:
-→ Response says: "available_patterns: [...list...]"
-→ Pick closest match OR write custom query
-
-If query fails:
-1. Check if you followed custom_instructions
-2. Check if you used correct JOINs
-3. Verify column names from structure
-4. Try simpler version first
-
-If "table not found":
-→ You didn't call get_schema_structure first!
-
-If "column not found":
-→ You guessed names instead of using structure!
-
-═══════════════════════════════════════════════════════════════
-COMPLETE EXAMPLE FLOW
-═══════════════════════════════════════════════════════════════
-
-User: "Show me my top 3 customers by revenue this month"
-
-Step 1: list_data_sources
-→ Found: xero_client_a
-
-Step 2: get_schema_structure("xero_client_a")
-→ has_custom_config: true
-→ available_patterns: ["revenue", "revenue_by_customer", ...]
-→ custom_instructions: [read and understand]
-
-Step 3: Pattern match
-→ User wants "customers by revenue" 
-→ Pattern exists: "revenue_by_customer"
-→ get_query_pattern("xero_client_a", "revenue_by_customer")
-
-Step 4: Modify pattern
-→ Add date filter: WHERE pl.date >= '2025-11-01'
-→ Add limit: LIMIT 3
-
-Step 5: Execute
-execute_sql_query(
-  schema_name: "xero_client_a",
-  sql: "
-    SELECT 
-      c.name as customer,
-      SUM(pl.amount) as total_revenue
-    FROM pl_xero pl
-    JOIN contacts c ON pl.contact_id = c.id
-    WHERE pl.type = 'Revenue'
-      AND pl.date >= '2025-11-01'
-      AND pl.date < '2025-12-01'
-    GROUP BY c.name
-    ORDER BY total_revenue DESC
-    LIMIT 3
-  "
-)
-
-Step 6: Format response
-"Your top 3 customers this month:
-1. ACME Corp: $45,230
-2. ABC Ltd: $32,100  
-3. XYZ Inc: $28,500"
-
-═══════════════════════════════════════════════════════════════
-KEY TAKEAWAYS
-═══════════════════════════════════════════════════════════════
-
-✅ ALWAYS check has_custom_config flag
-✅ ALWAYS read custom_instructions if present
-✅ PREFER using patterns over writing from scratch
-✅ FOLLOW join rules from custom_instructions
-✅ CACHE structure and patterns in conversation
-✅ MODIFY patterns to fit exact user question
-
-❌ NEVER ignore custom_instructions
-❌ NEVER guess table/column names
-❌ NEVER skip required JOINs
-❌ NEVER re-fetch same structure multiple times
-
-═══════════════════════════════════════════════════════════════
-GOOGLE MAPS TOOLS
-═══════════════════════════════════════════════════════════════
-
-${user_location ? `✅ USER LOCATION IS AVAILABLE: ${user_location.lat}, ${user_location.lng}
-Use this automatically for all location-based queries.
-` : '⚠️ User location not provided - ask for it if needed for maps queries.'}
-
-Available tools:
-1. search_places - Find restaurants, cafes, ATMs, hotels, hospitals, etc.
-2. get_directions - Get route with turn-by-turn instructions and traffic
-3. get_place_details - Get hours, phone, reviews, photos for a place
-4. calculate_distance - Quick distance/time between two points
-5. nearby_search - Discover top-rated places near a location
-
-${user_location ? `CRITICAL - AUTOMATIC LOCATION USAGE:
-When user asks location-based questions, tools automatically receive user_location.
-You don't need to ask for it - just call the tool!
-
-Query patterns:
-• "find [place] near me" → search_places (location auto-provided)
-• "how do I get to [place]?" → get_directions (origin auto-provided)
-• "how far is [place]?" → calculate_distance (origin auto-provided)
-• "how long to [place]?" → get_directions (origin auto-provided)
-• "what's nearby?" → nearby_search (location auto-provided)
-
-CRITICAL - USE SPECIFIC QUERIES:
-When calling search_places, use SPECIFIC query terms:
-❌ WRONG: query: "gym" (returns stores selling gym equipment)
-✅ CORRECT: query: "fitness center gym" (returns actual gyms)
-
-❌ WRONG: query: "coffee" (too vague)
-✅ CORRECT: query: "coffee shop cafe"
-
-❌ WRONG: query: "food" (too broad)
-✅ CORRECT: query: "italian restaurant" or "fast food restaurant"
-
-Examples of good queries:
-• "fitness center gym" → actual fitness centers
-• "coffee shop cafe" → coffee shops
-• "24-hour pharmacy" → pharmacies
-• "italian restaurant" → specific cuisine
-• "gas station" → fuel stations
-• "hospital emergency room" → hospitals
-
-❌ NEVER say: "I need your location" or "Where are you starting from?"
-✅ ALWAYS: Just call the tool - location is handled automatically
-` : ''}
-
-RESPONSE FORMAT:
-When you use search_places or nearby_search, the system returns structured data automatically.
-Keep your response BRIEF - just acknowledge what you found.
-
-IMPORTANT: search_places returns basic info (name, rating, distance, address).
-For phone numbers, website, hours, reviews → user should ask for details on specific place.
-
-For search_places / nearby_search:
-✅ CORRECT: "I found 5 gyms near you. Want details on any of them?"
-✅ CORRECT: "Here are 3 coffee shops nearby. Need phone or website for any?"
-✅ CORRECT: "Found 4 restaurants - the closest is 800m away. Which one interests you?"
-
-❌ WRONG: Don't list all details:
-"1. 🏋️ Gym Name: 3.9 km away, rated 4.4/5 ⭐..."
-(The structured data already contains this!)
-
-When user asks about a specific place:
-User: "Tell me about the second one" or "What's the phone for #2?"
-→ Call get_place_details with that place_id
-→ Return full details (phone, website, hours, reviews)
-
-For get_directions:
-Be slightly more detailed since routes need explanation:
-✅ "It's 12 km to the airport, about 20 minutes via Jl. Bypass Ngurah Rai."
-✅ "The stadium is 8.5 km away, roughly 15 minutes by car."
-
-For get_place_details:
-Highlight key info briefly:
-✅ "Revolver Espresso: +62 361 738 052, revolverespresso.com, rated 4.6/5, open until 5 PM today."
-
-Keep responses conversational and concise. The structured data contains all details.
-
-═══════════════════════════════════════════════════════════════
-
-Important for calendar events:
-- Always use timezone: ${timezone}
-- Use ISO 8601 format: YYYY-MM-DDTHH:mm:ss
-- When user says "tomorrow at 2pm", calculate based on ${timeInfo.localDate}
-
-When user mentions relative times, calculate from the current date/time above.
-
-═══════════════════════════════════════════════════════════════
-CRITICAL - TWO-STEP CONFIRMATION SYSTEM
-═══════════════════════════════════════════════════════════════
-
-STEP 1: CONTACT DISAMBIGUATION (When Multiple Contacts Found)
-─────────────────────────────────────────────────────────────
-
-When search_contact returns requiresDisambiguation: true:
-
-1. NEVER automatically pick one - ALWAYS show the numbered list
-2. Format naturally and conversationally:
-
-  "I found [number] people named '[name]':
-  
-  1. [Full Name] ([email@address.com])
-      Last contact: [X days ago]
-  
-  2. [Full Name] ([email@address.com])
-      Last contact: [X days ago]
-  
-  Which one did you mean?"
-
-  OR more casual:
-  
-  "There are [number] [name]s in your contacts:
-  
-  1. [Name] - [email]
-  2. [Name] - [email]
-  
-  Which one?"
-
-3. WAIT for selection: "1", "2", "first one", "the recent one", or the actual name
-4. Keep it conversational, not robotic
-5. Once selected, proceed naturally
-
-When search_contact returns noCloseMatch: true:
-
-This means the name is too different from contacts found (e.g., user typed "fitrahrr" but only "Fitrah" exists).
-
-Format response:
-
-"I couldn't find a close match for '[name]' in your contacts.
-
-Did you mean one of these?
-- [Suggested Name 1]
-- [Suggested Name 2]
-- [Suggested Name 3]
-
-Or please provide their email address directly."
-
-WAIT for user to clarify:
-- If they pick a name: Search again with that name
-- If they provide email: Use that email directly
-- DO NOT proceed without clarification
-
-STEP 2: ACTION CONFIRMATION (Always Required)
-─────────────────────────────────────────────────────────────
-
-Before executing ANY action (email, calendar event, delete):
-
-Use NATURAL, CONVERSATIONAL language. Be friendly and casual while still being clear.
-
-FOR EMAILS:
-Show preview in natural language:
-
-"I'll send this to [Name]:
-
-[Quote the key message/content]
-
-Want me to send it?"
-
-OR for more detail:
-
-"Got it! I'll email [Name] ([email]) about [topic].
-
-Subject: [subject]
-Message: [preview of content]
-
-Should I send that?"
-
-Alternative confirmations: "Sound good?", "Ready to send?", "Look okay?"
-
-FOR CALENDAR EVENTS:
-Show details naturally:
-
-"I'll set up a meeting with [Name]:
-• [Day] at [time]
-• [Duration]
-• They'll get a calendar invite
-
-Should I create it?"
-
-OR shorter:
-
-"Perfect! Inviting [Name] to meet [when] - want me to send the invite?"
-
-Alternative confirmations: "Good to create?", "Want me to book it?", "Should I set that up?"
-
-FOR DELETING EVENTS:
-"Just checking - delete [Event Name] on [Date]?
-
-This can't be undone. Confirm?"
-
-Alternative: "Remove this event? Just want to make sure."
-
-WAITING FOR CONFIRMATION:
-- Accept natural confirmations: "yes", "yeah", "yep", "sure", "ok", "okay", "go ahead", "send it", "do it", "create it", "looks good", "sounds good", "perfect"
-- Don't proceed if: "no", "nope", "wait", "hold on", "cancel", "stop", "not yet", "change it"
-- If user wants to edit, ask what they'd like to change
-- If user provides changes, show updated preview naturally and ask again
-
-BE CONVERSATIONAL:
-- Drop the emojis unless it fits naturally
-- Use contractions ("I'll" not "I will", "won't" not "will not")
-- Be friendly but concise
-- Don't over-explain
-- Match the user's tone (if they're casual, be casual)
-
-AVOID:
-- Overly formal language
-- Too many emojis (📧📋📝)
-- Repetitive phrases like "Reply 'yes' to..."
-- Robot-like formatting
-- Unnecessary line breaks
-
-═══════════════════════════════════════════════════════════════
-
-CRITICAL RULES - NEVER VIOLATE:
-1. Multiple contacts found → Show list → Wait for selection → Show confirmation → Wait for yes
-2. Single contact found → Show confirmation → Wait for yes
-3. NEVER send emails without explicit "yes"
-4. NEVER create events without explicit "yes"
-5. ALWAYS show full name AND email address in confirmations
-6. ALWAYS wait for user response before executing tools
-
-CONTEXT TRACKING:
-- Remember what action the user originally requested (email, calendar event, etc.)
-- When user selects a contact from a list, continue with the ORIGINAL action
-- Example:
-  User: "Create meeting with fitrah"
-  You: [Show list of fitrahs]
-  User: "1"
-  You: [Create CALENDAR EVENT with selected fitrah] ← NOT email!
-  
-- Do NOT switch actions mid-conversation
-- If user says "1" or "2" after a contact list, they're selecting from that list
-- Continue with the original action type (email, calendar, etc.)
-
-Example Flow:
-User: "Email fitrah about payment"
-You: [search_contact tool]
-Result: 3 matches found
-You: [Show numbered list, ask which one]
-User: "1"
-You: [Generate EMAIL content for selected contact, show preview, ask for confirmation]
-User: "yes"
-You: [Execute send_email tool]
-You: "✅ Email sent to Fitrah Ahmad (fitrah.ahmad@gmail.com)"
-
-READ-ONLY OPERATIONS (No confirmation needed):
-- search_contact (just searching, not sending)
-- list_calendar_events (just listing)
-- weather (just checking)
-- check_google_connection (just checking)
-- search_places (just searching)
-- get_directions (just getting directions)
-- nearby_search (just searching)
-- list_data_sources (just listing)
-- get_schema_structure (just reading structure)
-
-Execute these immediately without confirmation.`
-    };
-
-    // Build messages array with history
-    let messages;
+    // Execute tool loop
+    const result = await this._executeToolLoop(
+      messages,
+      modelId,
+      tools,
+      user_id,
+      user_location
+    );
     
-    if (conversationHistory.length > 0) {
-      messages = [systemMessage, ...conversationHistory];
-      console.log(`📚 Using ${conversationHistory.length} messages from history`);
-    } else {
-      messages = [systemMessage, { role: 'user', content: message }];
-      console.log('✨ Starting new conversation');
-    }
-    
+    return result;
+  }
+
+  /**
+   * Main tool execution loop
+   */
+  async _executeToolLoop(messages, modelId, tools, user_id, user_location) {
     let toolsCalled = [];
     let toolResults = [];
-    let maxIterations = 10; // Increased for disambiguation + confirmation flows
+    const maxIterations = 10;
     
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       console.log(`🔄 Iteration ${iteration + 1}`);
       
+      // Call OpenRouter API
       const response = await this.client.chat.completions.create({
         model: modelId,
         messages: messages,
@@ -773,123 +116,220 @@ Execute these immediately without confirmation.`
       const choice = response.choices[0];
       console.log(`🤖 Finish reason: ${choice.finish_reason}`);
       
-      // No tool calls - return final answer
-      if (choice.finish_reason === 'stop' || !choice.message.tool_calls) {
-        return {
-          message: choice.message.content,
-          toolsCalled: toolsCalled,
-          toolResults: toolResults,
-          model: modelId,
-          usage: response.usage
-        };
+      // Check if we're done
+      if (this._isComplete(choice)) {
+        return this._buildFinalResponse(
+          choice,
+          response,
+          toolsCalled,
+          toolResults,
+          modelId
+        );
       }
       
       // Handle tool calls
-      if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-        const toolCall = choice.message.tool_calls[0];
+      if (this._hasToolCalls(choice)) {
+        const continueLoop = await this._handleToolCall(
+          choice,
+          messages,
+          toolsCalled,
+          toolResults,
+          user_id,
+          user_location
+        );
         
-        console.log(`⚡ Calling tool: ${toolCall.function.name}`);
-        toolsCalled.push(toolCall.function.name);
-        
-        // const functionArgs = JSON.parse(toolCall.function.arguments);
-        let functionArgs = {};
-        try {
-          const argsString = toolCall.function.arguments?.trim();
-          if (!argsString || argsString === '') {
-            console.log('⚠️ Empty arguments, using empty object');
-            functionArgs = {};
-          } else {
-            functionArgs = JSON.parse(argsString);
-            console.log('✅ Parsed arguments:', Object.keys(functionArgs).join(', '));
-          }
-        } catch (parseError) {
-          console.error('❌ Failed to parse tool arguments:', parseError.message);
-          console.error('   Raw arguments:', toolCall.function.arguments);
-          console.error('   Tool name:', toolCall.function.name);
-          functionArgs = {}; // Fallback to empty object
-          console.log('⚠️ Using empty arguments object as fallback');
+        if (continueLoop) {
+          continue;
         }
-        
-        // Inject USER_ID for tools that need it
-        const toolsRequiringUserId = [
-          'create_calendar_event',
-          'list_calendar_events', 
-          'update_calendar_event',
-          'delete_calendar_event',
-          'check_google_connection',
-          'search_contact',
-          'send_email',
-          'list_data_sources',
-          'get_schema_structure',
-          'execute_sql_query',
-          'get_quick_analytics'
-        ];
-        
-        if (toolsRequiringUserId.includes(toolCall.function.name)) {
-          functionArgs.user_id = user_id;
-        }
-
-        // Inject USER_LOCATION for location-based tools
-        const toolsRequiringLocation = [
-          'weather',
-          'search_places',
-          'get_directions',
-          'get_place_details',
-          'calculate_distance',
-          'nearby_search'
-        ];
-        
-        if (toolsRequiringLocation.includes(toolCall.function.name) && user_location) {
-          functionArgs.user_location = user_location;
-          console.log(`📍 Injected user_location for ${toolCall.function.name}`);
-        }
-        
-        // Execute tool via MCP
-        const toolResult = await this.mcpClient.callTool({
-          name: toolCall.function.name,
-          arguments: functionArgs
-        });
-
-        // Safe result preview
-        try {
-          const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
-          const preview = resultText.substring(0, 200);
-          console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
-        } catch (err) {
-          console.log(`✅ Tool result received (preview failed):`, err.message);
-        }
-
-        // Store tool results for structured data
-        try {
-          const resultText = toolResult?.content?.[0]?.text;
-          if (resultText) {
-            const parsedResult = JSON.parse(resultText);
-            toolResults.push({
-              tool: toolCall.function.name,
-              data: parsedResult
-            });
-            console.log(`📦 Stored result from ${toolCall.function.name}`);
-          }
-        } catch (parseErr) {
-          console.log('⚠️ Could not parse tool result for structured data');
-        }
-        
-        // Add assistant message with tool call
-        messages.push(choice.message);
-        
-        // Add tool result
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(toolResult.content)
-        });
-        
-        continue;
       }
       
       break;
     }
     
+    return this._buildMaxIterationsResponse(toolsCalled, toolResults, modelId);
+  }
+
+  /**
+   * Handle a single tool call
+   */
+  async _handleToolCall(
+    choice, 
+    messages, 
+    toolsCalled, 
+    toolResults, 
+    user_id, 
+    user_location
+  ) {
+    const toolCall = choice.message.tool_calls[0];
+    const toolName = toolCall.function.name;
+    
+    toolsCalled.push(toolName);
+    
+    // Parse and inject parameters
+    let functionArgs = ToolExecutor.parseArguments(
+      toolCall.function.arguments,
+      toolName
+    );
+    
+    functionArgs = ToolConfig.injectParameters(
+      toolName,
+      functionArgs,
+      { user_id, user_location }
+    );
+    
+    // Execute tool
+    const toolResult = await this.toolExecutor.execute({
+      function: {
+        name: toolName,
+        arguments: JSON.stringify(functionArgs)
+      }
+    });
+    
+    // Store results
+    ToolExecutor.storeResult(toolResults, toolName, toolResult);
+    
+    // Update conversation
+    ConversationManager.addAssistantMessage(messages, choice.message);
+    ConversationManager.addToolResult(messages, toolCall.id, toolResult);
+    
+    return true; // Continue loop
+  }
+
+  // ============================================
+  // HELPER METHODS
+  // ============================================
+
+  /**
+   * Validate required inputs
+   */
+  _validateInputs(user_id) {
+    if (!isConfigured) {
+      throw new Error('OpenRouter API key not configured');
+    }
+    
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+  }
+
+  /**
+   * Select appropriate model
+   */
+  _selectModel(message, requestedModel) {
+    if (requestedModel) {
+      console.log(`🎯 Using user-requested model: ${requestedModel}`);
+      return requestedModel;
+    }
+    
+    const selectedModel = this.modelSelector.selectModel(message);
+    const reasoning = this.modelSelector.getModelReasoning(message);
+    
+    console.log(`🤖 Auto-selected: ${selectedModel}`);
+    console.log(`   Reason: ${reasoning.reason}`);
+    
+    if (reasoning.keywords.length > 0) {
+      console.log(`   Keywords detected: ${reasoning.keywords.join(', ')}`);
+    }
+    
+    return selectedModel;
+  }
+
+  /**
+   * Get model configuration
+   */
+  _getModelConfig(modelName) {
+    const config = models[modelName];
+    if (!config) {
+      throw new Error(`Unknown model: ${modelName}`);
+    }
+    return config;
+  }
+
+  /**
+   * Log processing information
+   */
+  _logProcessingInfo(modelConfig, user_id, conversationHistory, user_location) {
+    console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
+    console.log(`   User: ${user_id}`);
+    console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
+    
+    if (user_location) {
+      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
+    }
+  }
+
+  /**
+   * Convert MCP tools to OpenAI format
+   */
+  _convertMCPToolsToOpenAI(mcpTools) {
+    console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
+    
+    return mcpTools.tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema
+      }
+    }));
+  }
+
+  /**
+   * Build context for prompt builder
+   */
+  _buildContext(user_location, user_name) {
+    // Detect timezone
+    let timezone = 'Asia/Makassar';
+    let locationInfo = '';
+    
+    if (user_location && user_location.lat && user_location.lng) {
+      timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
+      locationInfo = `\nUser coordinates: ${user_location.lat}, ${user_location.lng}`;
+    }
+
+    // Get current time
+    const timeInfo = getCurrentTimeInTimezone(timezone);
+    
+    return {
+      user_location,
+      timezone,
+      timeInfo,
+      user_name,
+      locationInfo
+    };
+  }
+
+  /**
+   * Check if response is complete
+   */
+  _isComplete(choice) {
+    return choice.finish_reason === 'stop' || !choice.message.tool_calls;
+  }
+
+  /**
+   * Check if choice has tool calls
+   */
+  _hasToolCalls(choice) {
+    return choice.finish_reason === 'tool_calls' && choice.message.tool_calls;
+  }
+
+  /**
+   * Build final successful response
+   */
+  _buildFinalResponse(choice, response, toolsCalled, toolResults, modelId) {
+    return {
+      message: choice.message.content,
+      toolsCalled: toolsCalled,
+      toolResults: toolResults,
+      model: modelId,
+      usage: response.usage
+    };
+  }
+
+  /**
+   * Build max iterations response
+   */
+  _buildMaxIterationsResponse(toolsCalled, toolResults, modelId) {
     return {
       message: 'Max iterations reached',
       toolsCalled: toolsCalled,

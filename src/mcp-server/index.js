@@ -1,4 +1,4 @@
-// src/mcp-server/index.js - UPDATED VERSION
+// src/mcp-server/index.js - SECURE VERSION WITH ACCESS CONTROL
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -18,22 +18,17 @@ import {
 import { searchContactTool } from './tools/contact.tool.js';
 import { sendEmailTool } from './tools/email.tool.js';
 
-// ⭐ NEW: Enhanced database tools
-import { 
-  getUserSchemasTool,
-  executeDynamicQueryTool,
-  getQuickAnalyticsTool
-} from './tools/dynamic-query.tool.js';
-
-import {
-  getEnhancedSchemaStructureTool,
-  getQueryPatternTool,
-  listQueryPatternsTool
-} from './tools/enhanced-dynamic-query.tool.js';
-
 // Google Maps
 import { googleMapsTools } from './tools/maps.tools.js';
 import { googleMapsHandlers } from './handlers/maps.handlers.js';
+
+// ⭐ SECURE DATABASE TOOLS with access verification
+import { 
+  getUserSchemasTool,
+  getEnhancedSchemaStructureTool,
+  executeSQLQueryTool,
+  getQuickAnalyticsTool
+} from './tools/enhanced-dynamic-query.tool.js';
 
 // Create MCP server
 const server = new Server({
@@ -47,7 +42,6 @@ const server = new Server({
 
 // Define all tools
 const TOOLS = [
-  // ... existing tools (weather, contact, email, calendar) ...
   {
     name: 'weather',
     description: 'Get the current weather for a given location. Can use user location if no location specified.',
@@ -202,10 +196,10 @@ const TOOLS = [
     }
   },
 
-  // ⭐ ENHANCED DATABASE TOOLS
+  // ⭐ SECURE DATABASE TOOLS WITH ACCESS CONTROL
   {
     name: 'list_data_sources',
-    description: 'ALWAYS call this FIRST when user asks about revenue, expenses, profit, or any financial data. Returns list of available company data sources (schemas) that user has access to.',
+    description: '🔐 ALWAYS call this FIRST when user asks about revenue, expenses, profit, or any financial data. Returns list of data sources (schemas) that user has permission to access. Each schema represents a different company/client database.',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -214,7 +208,7 @@ const TOOLS = [
 
   {
     name: 'get_schema_structure',
-    description: '⭐ ENHANCED: Discovers table structure AND provides custom instructions if available. CALL THIS SECOND after list_data_sources. Returns tables, columns, sample data, AND schema-specific query patterns for complex schemas. CRITICAL: Check for "has_custom_config" flag - if true, you MUST read and follow the custom_instructions provided.',
+    description: '🔐 CALL THIS SECOND after list_data_sources. Verifies user access and returns table structure, columns, sample data, AND custom query instructions if available. CRITICAL: Always check "has_access" field - if false, user cannot query this schema.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -228,95 +222,41 @@ const TOOLS = [
   },
 
   {
-    name: 'list_query_patterns',
-    description: '⭐ NEW: List available pre-built query patterns for a schema. Use this to discover shortcuts like "revenue_by_customer", "outstanding_invoices", "cash_flow". These are tested, optimized queries for common business questions.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name to check for patterns'
-        }
-      },
-      required: ['schema_name']
-    }
-  },
-
-  {
-    name: 'get_query_pattern',
-    description: '⭐ NEW: Get a specific pre-built query pattern. Returns ready-to-use SQL for common queries. You can modify the pattern (add WHERE clauses, change date ranges, etc.) before executing.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        schema_name: {
-          type: 'string',
-          description: 'Schema name'
-        },
-        pattern_name: {
-          type: 'string',
-          description: 'Pattern name from list_query_patterns (e.g., "revenue_by_customer")'
-        }
-      },
-      required: ['schema_name', 'pattern_name']
-    }
-  },
-
-  {
     name: 'execute_sql_query',
-    description: 'Execute a custom SQL SELECT query. ONLY use after calling get_schema_structure. If schema has custom_instructions, follow those rules for joins and business logic.',
+    description: '🔐 SECURE: Execute SQL query with automatic access verification. CALL THIS THIRD after confirming schema access. User permissions are verified before executing ANY query. Returns query results or ACCESS_DENIED error. Only SELECT queries allowed.',
     inputSchema: {
       type: 'object',
       properties: {
         schema_name: {
           type: 'string',
-          description: 'Schema name from list_data_sources'
+          description: 'Schema name to query (must match schema from get_schema_structure)'
         },
-        sql: {
+        sql_query: {
           type: 'string',
-          description: 'SQL SELECT query using EXACT table/column names from get_schema_structure. If custom patterns exist, consider using those as templates.'
-        },
-        params: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional parameters for parameterized queries'
+          description: 'SQL SELECT query to execute. Must be valid SQL for the schema. Example: "SELECT SUM(total) FROM invoices WHERE date >= \'2024-01-01\'"'
         }
       },
-      required: ['schema_name', 'sql']
+      required: ['schema_name', 'sql_query']
     }
   },
 
   {
     name: 'get_quick_analytics',
-    description: 'Simplified analytics for common aggregations. Use AFTER get_schema_structure. Good for simple totals and counts.',
+    description: '🔐 SECURE: Get predefined analytics with access verification. Faster than execute_sql_query for common metrics. Available metrics: total_revenue, total_expenses, customer_count. Access is verified automatically.',
     inputSchema: {
       type: 'object',
       properties: {
         schema_name: {
           type: 'string',
-          description: 'Schema name from list_data_sources'
-        },
-        table_name: {
-          type: 'string',
-          description: 'Table name from get_schema_structure'
+          description: 'Schema name to query'
         },
         metric: {
           type: 'string',
-          description: 'What to calculate: "SUM(amount)", "COUNT(*)", "AVG(amount)"'
-        },
-        group_by: {
-          type: 'string',
-          description: 'Column to group by'
-        },
-        start_date: {
-          type: 'string',
-          description: 'Start date YYYY-MM-DD (optional)'
-        },
-        end_date: {
-          type: 'string',
-          description: 'End date YYYY-MM-DD (optional)'
+          enum: ['total_revenue', 'total_expenses', 'customer_count'],
+          description: 'Predefined metric to calculate'
         }
       },
-      required: ['schema_name', 'table_name', 'metric']
+      required: ['schema_name', 'metric']
     }
   },
   
@@ -330,7 +270,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
-  // Existing handlers...
   weather: async (args) => {
     const { location, user_location } = args;
     
@@ -440,7 +379,7 @@ const toolHandlers = {
     };
   },
 
-  // ⭐ ENHANCED DATABASE HANDLERS
+  // ⭐ SECURE DATABASE HANDLERS WITH ACCESS CONTROL
   list_data_sources: async (args) => {
     const { user_id } = args;
     console.error(`⚡ MCP: Listing data sources for user: ${user_id}`);
@@ -452,41 +391,19 @@ const toolHandlers = {
 
   get_schema_structure: async (args) => {
     const { user_id, schema_name } = args;
-    console.error(`⚡ MCP: Getting ENHANCED schema structure for ${schema_name}`);
+    console.error(`⚡ MCP: 🔐 Verifying access and getting schema: ${schema_name}`);
     
     const result = await getEnhancedSchemaStructureTool({
       userId: user_id,
       schemaName: schema_name
     });
     
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  list_query_patterns: async (args) => {
-    const { user_id, schema_name } = args;
-    console.error(`⚡ MCP: Listing query patterns for ${schema_name}`);
-    
-    const result = await listQueryPatternsTool({
-      userId: user_id,
-      schemaName: schema_name
-    });
-    
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  get_query_pattern: async (args) => {
-    const { user_id, schema_name, pattern_name } = args;
-    console.error(`⚡ MCP: Getting query pattern ${pattern_name} for ${schema_name}`);
-    
-    const result = await getQueryPatternTool({
-      userId: user_id,
-      schemaName: schema_name,
-      patternName: pattern_name
-    });
+    // Log access result
+    if (result.has_access) {
+      console.error(`✅ Access granted: ${user_id} → ${schema_name}`);
+    } else {
+      console.error(`❌ Access denied: ${user_id} → ${schema_name}`);
+    }
     
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
@@ -494,15 +411,23 @@ const toolHandlers = {
   },
 
   execute_sql_query: async (args) => {
-    const { user_id, schema_name, sql, params } = args;
-    console.error(`⚡ MCP: Executing SQL on ${schema_name}`);
+    const { user_id, schema_name, sql_query } = args;
+    console.error(`⚡ MCP: 🔐 Executing query with access verification`);
+    console.error(`   User: ${user_id}, Schema: ${schema_name}`);
     
-    const result = await executeDynamicQueryTool({
+    const result = await executeSQLQueryTool({
       userId: user_id,
       schemaName: schema_name,
-      sql,
-      params
+      sqlQuery: sql_query
     });
+    
+    if (!result.has_access) {
+      console.error(`❌ Query blocked: User ${user_id} lacks access to ${schema_name}`);
+    } else if (result.success) {
+      console.error(`✅ Query executed: ${result.row_count} rows returned`);
+    } else {
+      console.error(`⚠️ Query failed: ${result.error}`);
+    }
     
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
@@ -510,17 +435,13 @@ const toolHandlers = {
   },
 
   get_quick_analytics: async (args) => {
-    const { user_id, schema_name, table_name, metric, group_by, start_date, end_date } = args;
-    console.error(`⚡ MCP: Quick analytics on ${schema_name}.${table_name}`);
+    const { user_id, schema_name, metric } = args;
+    console.error(`⚡ MCP: 🔐 Getting analytics: ${metric} from ${schema_name}`);
     
     const result = await getQuickAnalyticsTool({
       userId: user_id,
       schemaName: schema_name,
-      tableName: table_name,
-      metric,
-      groupBy: group_by,
-      startDate: start_date,
-      endDate: end_date
+      metric: metric
     });
     
     return {
@@ -564,7 +485,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ MCP Server started with ENHANCED database tools');
+  console.error('✅ MCP Server started with SECURE database access control');
 }
 
 main().catch(error => {

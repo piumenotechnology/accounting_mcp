@@ -1,286 +1,204 @@
 // src/config/schema-configs.js
 
-/**
- * Schema-specific configurations and instructions
- * Add custom handling for complex schemas that need special attention
- */
-
 export const schemaConfigs = {
-  // Example: Xero schema with complex structure
-//   'xero_client_a': {
-//     displayName: 'ABC Corp',
-//     source: 'xero',
+  'hireplus': {
+    displayName: 'Hireplus Vehicle Rentals',
+    source: 'hireplus',
     
-//     // Custom instructions for this schema
-//     customInstructions: `
-// ═══════════════════════════════════════════════════════════════
-// SCHEMA: xero_client_a (ABC Corp)
-// ═══════════════════════════════════════════════════════════════
+    customInstructions: `
+HIREPLUS - PATTERN-FIRST APPROACH
 
-// KEY TABLES:
-// 1. pl_xero - Profit & Loss transactions
-// 2. bank_transactions - Bank account movements
-// 3. invoices - Customer invoices
-// 4. bills - Supplier bills
-// 5. contacts - Customer/supplier information
+STRATEGY:
+1. Check if query matches a pattern → Use it directly (fast!)
+2. No pattern match → Call get_schema_structure ONCE
+3. Use exact column names from structure for custom queries
 
-// IMPORTANT RELATIONSHIPS:
-// • pl_xero.contact_id → contacts.id (for customer/supplier details)
-// • bank_transactions.invoice_id → invoices.id (for payment tracking)
-// • invoices.contact_id → contacts.id (for customer info)
+AVAILABLE PATTERNS (use these first):
+- active_rentals: List current rental contracts
+- contract_income: Income breakdown per contract
+- vehicle_total_income: Total income per vehicle
+- income_by_customer: Revenue by customer
+- vehicle_margin: Profitability per vehicle
+- monthly_revenue: Current monthly revenue projection
 
-// COMMON QUERIES:
+WHEN TO DISCOVER:
+Only if user asks something NOT covered by patterns above.
+Example: "Show contracts ending next month" → No pattern → Discover
 
-// 1️⃣ REVENUE BY CUSTOMER:
-// SELECT 
-//   c.name as customer,
-//   SUM(pl.amount) as total_revenue,
-//   COUNT(*) as transaction_count
-// FROM pl_xero pl
-// JOIN contacts c ON pl.contact_id = c.id
-// WHERE pl.type = 'Revenue'
-// GROUP BY c.name
-// ORDER BY total_revenue DESC;
+IMPORTANT COLUMN NAMES (if you need to write custom SQL):
+- vehicle_registration (NOT regi_no or registration)
+- vehicle_manufactur (NOT manufacturer - typo in DB)
+- amount_oi (other_incomes amount)
+- amount_oc (other_costs amount)
+- next_step_status_sales (status field)
+- id_purchase_order (FK, integer type)
 
-// 2️⃣ OUTSTANDING INVOICES:
-// SELECT 
-//   i.invoice_number,
-//   c.name as customer,
-//   i.total,
-//   i.amount_paid,
-//   (i.total - i.amount_paid) as outstanding,
-//   i.due_date,
-//   CASE 
-//     WHEN i.due_date < CURRENT_DATE THEN 'OVERDUE'
-//     ELSE 'PENDING'
-//   END as status
-// FROM invoices i
-// JOIN contacts c ON i.contact_id = c.id
-// WHERE i.status != 'PAID'
-// ORDER BY i.due_date;
-
-// 3️⃣ CASH FLOW ANALYSIS:
-// SELECT 
-//   DATE_TRUNC('month', bt.date) as month,
-//   SUM(CASE WHEN bt.type = 'RECEIVE' THEN bt.amount ELSE 0 END) as inflow,
-//   SUM(CASE WHEN bt.type = 'SPEND' THEN bt.amount ELSE 0 END) as outflow,
-//   SUM(CASE WHEN bt.type = 'RECEIVE' THEN bt.amount ELSE -bt.amount END) as net_cash_flow
-// FROM bank_transactions bt
-// WHERE bt.date >= DATE_TRUNC('year', CURRENT_DATE)
-// GROUP BY month
-// ORDER BY month DESC;
-
-// 4️⃣ TOP EXPENSES BY CATEGORY:
-// SELECT 
-//   account_name,
-//   SUM(ABS(amount)) as total,
-//   COUNT(*) as count,
-//   AVG(ABS(amount)) as avg_amount
-// FROM pl_xero
-// WHERE type = 'Expense'
-//   AND date >= DATE_TRUNC('month', CURRENT_DATE)
-// GROUP BY account_name
-// ORDER BY total DESC
-// LIMIT 10;
-
-// 5️⃣ CUSTOMER PAYMENT BEHAVIOR:
-// SELECT 
-//   c.name as customer,
-//   COUNT(i.id) as invoice_count,
-//   SUM(i.total) as total_invoiced,
-//   SUM(i.amount_paid) as total_paid,
-//   AVG(EXTRACT(days FROM (i.paid_date - i.invoice_date))) as avg_days_to_pay
-// FROM invoices i
-// JOIN contacts c ON i.contact_id = c.id
-// WHERE i.status = 'PAID'
-//   AND i.invoice_date >= CURRENT_DATE - INTERVAL '12 months'
-// GROUP BY c.name
-// HAVING COUNT(i.id) >= 3
-// ORDER BY avg_days_to_pay;
-
-// BUSINESS RULES:
-// • Revenue is positive amounts in pl_xero where type = 'Revenue'
-// • Expenses are negative amounts (use ABS() to get positive values)
-// • Bank reconciliation: check bank_transactions.reconciled = true
-// • Overdue invoices: WHERE due_date < CURRENT_DATE AND status != 'PAID'
-
-// DATA QUALITY NOTES:
-// • Some older transactions may have NULL contact_id
-// • Invoice numbers follow format: INV-YYYY-NNNN
-// • Bank transactions before 2024-01-01 may have missing categories
-// `,
+KEY JOINS:
+- so.id_purchase_order = po.id (integer = integer)
+- oi.id_sales_order = so.id (contract-level income)
+- oi.id_purchase_order = po.id (vehicle-level income)
+`,
     
-//     // Common query patterns for this schema
-//     queryPatterns: {
-//       revenue: `
-//         SELECT SUM(amount) as total 
-//         FROM pl_xero 
-//         WHERE type = 'Revenue'
-//       `,
+    queryPatterns: {
+      active_rentals: `
+        SELECT 
+          so.agreement_number,
+          so.cust_name,
+          po.vehicle_registration,
+          po.vehicle_manufactur,
+          po.vehicle_model,
+          so.monthly_rental,
+          so.contract_start_date
+        FROM sales_orders so
+        LEFT JOIN purchase_orders po ON po.id = so.id_purchase_order
+        WHERE so.next_step_status_sales = 'Hired'
+        ORDER BY so.contract_start_date DESC
+      `,
+
+      contract_income: `
+        SELECT 
+          so.agreement_number,
+          so.cust_name,
+          po.vehicle_registration,
+          ((so.monthly_rental * so.margin_term) + so.first_payment) as rental_income,
+          COALESCE(SUM(oi.amount_oi), 0) as other_income,
+          ((so.monthly_rental * so.margin_term) + so.first_payment) + COALESCE(SUM(oi.amount_oi), 0) as total_income
+        FROM sales_orders so
+        LEFT JOIN purchase_orders po ON po.id = so.id_purchase_order
+        LEFT JOIN other_incomes oi ON oi.id_sales_order = so.id
+        GROUP BY so.id, so.agreement_number, so.cust_name, po.vehicle_registration, so.monthly_rental, so.margin_term, so.first_payment
+        ORDER BY total_income DESC
+      `,
+
+      vehicle_total_income: `
+        SELECT 
+          po.vehicle_registration,
+          po.vehicle_manufactur,
+          po.vehicle_model,
+          COUNT(DISTINCT so.id) as contract_count,
+          SUM((so.monthly_rental * so.margin_term) + so.first_payment) as rental_income,
+          COALESCE(SUM(oi.amount_oi), 0) as other_income,
+          SUM((so.monthly_rental * so.margin_term) + so.first_payment) + COALESCE(SUM(oi.amount_oi), 0) as total_income
+        FROM purchase_orders po
+        LEFT JOIN sales_orders so ON so.id_purchase_order = po.id
+        LEFT JOIN other_incomes oi ON oi.id_purchase_order = po.id
+        GROUP BY po.id, po.vehicle_registration, po.vehicle_manufactur, po.vehicle_model
+        ORDER BY total_income DESC
+      `,
+
+      income_by_customer: `
+        SELECT 
+          so.cust_name as customer,
+          COUNT(so.id) as contract_count,
+          SUM((so.monthly_rental * so.margin_term) + so.first_payment) as rental_income,
+          COALESCE(SUM(oi.amount_oi), 0) as other_income,
+          SUM((so.monthly_rental * so.margin_term) + so.first_payment) + COALESCE(SUM(oi.amount_oi), 0) as total_income
+        FROM sales_orders so
+        LEFT JOIN other_incomes oi ON oi.id_sales_order = so.id
+        GROUP BY so.cust_name
+        ORDER BY total_income DESC
+      `,
       
-//       revenue_by_customer: `
-//         SELECT 
-//           c.name, 
-//           SUM(pl.amount) as total
-//         FROM pl_xero pl
-//         JOIN contacts c ON pl.contact_id = c.id
-//         WHERE pl.type = 'Revenue'
-//         GROUP BY c.name
-//         ORDER BY total DESC
-//       `,
+      vehicle_margin: `
+        SELECT 
+          po.vehicle_registration,
+          po.vehicle_manufactur,
+          po.vehicle_model,
+          so.cust_name,
+          so.next_step_status_sales as status,
+          ((so.monthly_rental * so.margin_term) + so.first_payment) as rental_income,
+          COALESCE(SUM(oi.amount_oi), 0) as other_income,
+          so.total_cost as cost,
+          COALESCE(SUM(oc.amount_oc), 0) as other_costs,
+          (((so.monthly_rental * so.margin_term) + so.first_payment) + COALESCE(SUM(oi.amount_oi), 0) - so.total_cost - COALESCE(SUM(oc.amount_oc), 0)) as net_margin
+        FROM sales_orders so
+        LEFT JOIN purchase_orders po ON po.id = so.id_purchase_order
+        LEFT JOIN other_incomes oi ON oi.id_sales_order = so.id
+        LEFT JOIN other_costs oc ON oc.id_purchase_order = po.id
+        GROUP BY so.id, po.vehicle_registration, po.vehicle_manufactur, po.vehicle_model, so.cust_name, so.next_step_status_sales, so.monthly_rental, so.margin_term, so.first_payment, so.total_cost
+        ORDER BY net_margin DESC
+      `,
       
-//       outstanding_invoices: `
-//         SELECT 
-//           i.invoice_number,
-//           c.name as customer,
-//           (i.total - i.amount_paid) as outstanding
-//         FROM invoices i
-//         JOIN contacts c ON i.contact_id = c.id
-//         WHERE i.status != 'PAID'
-//       `,
-      
-//       cash_flow: `
-//         SELECT 
-//           DATE_TRUNC('month', date) as month,
-//           SUM(CASE WHEN type = 'RECEIVE' THEN amount ELSE -amount END) as net
-//         FROM bank_transactions
-//         GROUP BY month
-//         ORDER BY month DESC
-//       `
-//     }
-//   },
+      monthly_revenue: `
+        SELECT 
+          SUM(so.monthly_rental) as total_monthly_revenue,
+          COUNT(so.id) as active_contract_count,
+          AVG(so.monthly_rental) as avg_monthly_rental
+        FROM sales_orders so
+        WHERE so.next_step_status_sales = 'Hired'
+      `
+    }
+  },
 
-//   // Example: Another client with different structure
-//   'quickbooks_client_b': {
-//     displayName: 'XYZ Ltd',
-//     source: 'quickbooks',
-    
-//     customInstructions: `
-// ═══════════════════════════════════════════════════════════════
-// SCHEMA: quickbooks_client_b (XYZ Ltd)
-// ═══════════════════════════════════════════════════════════════
-
-// KEY TABLES:
-// 1. transactions - All financial transactions
-// 2. accounts - Chart of accounts
-// 3. customers - Customer master data
-// 4. vendors - Vendor master data
-
-// IMPORTANT RELATIONSHIPS:
-// • transactions.account_id → accounts.id
-// • transactions.customer_id → customers.id (for sales)
-// • transactions.vendor_id → vendors.id (for purchases)
-
-// SPECIAL NOTES:
-// • This company uses CLASS tracking (transactions.class_id)
-// • Department codes stored in transactions.department
-// • Multi-currency: Always filter by transactions.currency = 'USD' unless specified
-
-// COMMON QUERIES:
-
-// 1️⃣ REVENUE BY DEPARTMENT:
-// SELECT 
-//   department,
-//   SUM(amount) as total
-// FROM transactions t
-// JOIN accounts a ON t.account_id = a.id
-// WHERE a.account_type = 'Income'
-//   AND t.currency = 'USD'
-// GROUP BY department
-// ORDER BY total DESC;
-
-// 2️⃣ VENDOR SPENDING:
-// SELECT 
-//   v.name,
-//   SUM(t.amount) as total_spent,
-//   COUNT(*) as transaction_count
-// FROM transactions t
-// JOIN vendors v ON t.vendor_id = v.id
-// WHERE t.transaction_type = 'Bill'
-//   AND t.date >= DATE_TRUNC('year', CURRENT_DATE)
-// GROUP BY v.name
-// ORDER BY total_spent DESC;
-
-// BUSINESS RULES:
-// • Always filter by currency = 'USD' for main reports
-// • Class tracking: 'CORP' = corporate, 'RETAIL' = retail operations
-// • Fiscal year starts April 1st (use DATE_TRUNC appropriately)
-// `,
-    
-//     queryPatterns: {
-//       revenue: `
-//         SELECT SUM(t.amount) as total
-//         FROM transactions t
-//         JOIN accounts a ON t.account_id = a.id
-//         WHERE a.account_type = 'Income'
-//           AND t.currency = 'USD'
-//       `,
-      
-//       expenses_by_vendor: `
-//         SELECT 
-//           v.name,
-//           SUM(t.amount) as total
-//         FROM transactions t
-//         JOIN vendors v ON t.vendor_id = v.id
-//         WHERE t.transaction_type = 'Bill'
-//         GROUP BY v.name
-//         ORDER BY total DESC
-//       `
-//     }
-//   },
-
-  // Add more schemas as needed...
-  
-  // Default fallback for schemas without custom config
   'default': {
-    displayName: 'Unknown Schema',
+    displayName: 'Generic Data Source',
     source: 'unknown',
     customInstructions: `
-═══════════════════════════════════════════════════════════════
-GENERIC SCHEMA INSTRUCTIONS
-═══════════════════════════════════════════════════════════════
+GENERIC SCHEMA - DISCOVERY REQUIRED
 
-This schema doesn't have custom instructions yet.
+NO PATTERNS AVAILABLE - Must discover structure first
 
-WORKFLOW:
-1. Call list_data_sources to see schema name
-2. Call get_schema_structure to discover tables and columns
-3. Examine sample_data carefully to understand data patterns
-4. Write queries using EXACT names from schema structure
+MANDATORY WORKFLOW:
+1. Call get_schema_structure(schema_name)
+2. Read response carefully:
+   - structure: tables and columns
+   - sample_data: actual data formats
+3. Use EXACT column names (copy from structure)
+4. Check data types before joining
+5. Write query using exact names
+6. Execute
 
-BEST PRACTICES:
-• Always check column names before writing queries
-• Look at sample data to understand value formats
-• Use appropriate date formats (usually YYYY-MM-DD)
-• Handle NULL values appropriately
-• Test with simple queries first before complex joins
+CRITICAL RULES:
+❌ NEVER guess column names
+❌ NEVER assume standard names (id, name, amount)
+❌ NEVER use abbreviations
+✅ ALWAYS use exact names from get_schema_structure
+✅ ALWAYS check sample_data for formats
+✅ ALWAYS verify data types match in JOINs
+
+COMMON ERRORS TO AVOID:
+- text = integer (type mismatch)
+- Guessing "registration" when it's "vehicle_registration"
+- Using "amount" when it's "amount_oi" or "amount_oc"
+- Abbreviated names like "regi_no" instead of full name
 `,
     queryPatterns: {}
   }
 };
 
+/**
+ * Get configuration for a specific schema
+ */
 export function getSchemaConfig(schemaName) {
   return schemaConfigs[schemaName] || schemaConfigs['default'];
 }
 
-
+/**
+ * Get custom instructions for a schema
+ */
 export function getSchemaInstructions(schemaName) {
   const config = getSchemaConfig(schemaName);
   return config.customInstructions;
 }
 
-
+/**
+ * Get a query pattern for a schema
+ */
 export function getQueryPattern(schemaName, patternName) {
   const config = getSchemaConfig(schemaName);
   return config.queryPatterns[patternName] || null;
 }
 
-
+/**
+ * Check if a schema has custom configuration
+ */
 export function hasCustomConfig(schemaName) {
   return schemaName in schemaConfigs && schemaName !== 'default';
 }
 
-
+/**
+ * List all configured schemas
+ */
 export function listConfiguredSchemas() {
   return Object.keys(schemaConfigs)
     .filter(key => key !== 'default')
@@ -288,6 +206,7 @@ export function listConfiguredSchemas() {
       schemaName: key,
       displayName: schemaConfigs[key].displayName,
       source: schemaConfigs[key].source,
-      hasCustomInstructions: true
+      hasCustomInstructions: true,
+      patternCount: Object.keys(schemaConfigs[key].queryPatterns || {}).length
     }));
 }
