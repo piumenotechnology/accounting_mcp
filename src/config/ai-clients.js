@@ -29,13 +29,13 @@ export const models = {
     cost: '$$',
     provider: 'openrouter'
   },
-  gemini: {
-    id: 'google/gemini-2.5-flash',
-    name: 'Gemini 2.0 Flash',
-    strengths: 'Quick tasks',
-    cost: 'FREE',
-    provider: 'openrouter'
-  },
+  // gemini: {
+  //   id: 'google/gemini-2.5-flash',
+  //   name: 'Gemini 2.0 Flash',
+  //   strengths: 'Quick tasks',
+  //   cost: 'FREE',
+  //   provider: 'openrouter'
+  // },
   grock: {
     id: 'x-ai/grok-4-fast',
     name: 'Grok 4 Fast',
