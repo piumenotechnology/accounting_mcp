@@ -64,61 +64,61 @@ export const chatModels = {
   },
 
   // Save message
-  // saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
-  //   const query = `
-  //     INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
-  //     VALUES ($1, $2, $3, $4, $5, $6)
-  //     RETURNING *`;
-  //   try {
-  //     const result = await pool.query(query, [conversation_id, role, content, model, tokens_used,  detailed_content ? JSON.stringify(detailed_content) : null]);
-  //     return result.rows[0];
-  //   } catch (error) {
-  //     console.error('❌ Error in saveMessage:', error.message);
-  //     throw new Error('Failed to save message');
-  //   }
-  // },
-
-
   saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
-  const query = `
-    INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING *`;
-  try {
-    console.log('💾 Saving message:', {
-      conversation_id,
-      role,
-      content_length: content?.length,
-      model,
-      tokens_used,
-      has_detailed_content: !!detailed_content,
-      detailed_content_keys: detailed_content ? Object.keys(detailed_content) : null
-    });
+    const query = `
+      INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *`;
+    try {
+      const result = await pool.query(query, [conversation_id, role, content, model, tokens_used,  detailed_content ? JSON.stringify(detailed_content) : null]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error in saveMessage:', error.message);
+      throw new Error('Failed to save message');
+    }
+  },
+
+
+//   saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
+//   const query = `
+//     INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
+//     VALUES ($1, $2, $3, $4, $5, $6)
+//     RETURNING *`;
+//   try {
+//     console.log('💾 Saving message:', {
+//       conversation_id,
+//       role,
+//       content_length: content?.length,
+//       model,
+//       tokens_used,
+//       has_detailed_content: !!detailed_content,
+//       detailed_content_keys: detailed_content ? Object.keys(detailed_content) : null
+//     });
     
-    const result = await pool.query(query, [
-      conversation_id, 
-      role, 
-      content, 
-      model, 
-      tokens_used,  
-      detailed_content ? JSON.stringify(detailed_content) : null
-    ]);
+//     const result = await pool.query(query, [
+//       conversation_id, 
+//       role, 
+//       content, 
+//       model, 
+//       tokens_used,  
+//       detailed_content ? JSON.stringify(detailed_content) : null
+//     ]);
     
-    console.log('✅ Message saved successfully');
-    return result.rows[0];
-  } catch (error) {
-    console.error('❌ Error in saveMessage:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    console.error('❌ Error details:', {
-      conversation_id,
-      role,
-      model,
-      tokens_used,
-      detailed_content_preview: detailed_content ? JSON.stringify(detailed_content).substring(0, 200) : null
-    });
-    throw new Error('Failed to save message: ' + error.message);
-  }
-},
+//     console.log('✅ Message saved successfully');
+//     return result.rows[0];
+//   } catch (error) {
+//     console.error('❌ Error in saveMessage:', error.message);
+//     console.error('❌ Error stack:', error.stack);
+//     console.error('❌ Error details:', {
+//       conversation_id,
+//       role,
+//       model,
+//       tokens_used,
+//       detailed_content_preview: detailed_content ? JSON.stringify(detailed_content).substring(0, 200) : null
+//     });
+//     throw new Error('Failed to save message: ' + error.message);
+//   }
+// },
 
 
   // Get conversation history (all messages)
