@@ -7,7 +7,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 // Existing imports
-import { weatherTool } from './tools/weather.tool.js';
 import { 
   createCalendarEventTool, 
   listCalendarEventsTool,
@@ -40,19 +39,16 @@ const server = new Server({
 
 // Define all tools
 const TOOLS = [
+  // Google connection check tool
   {
-    name: 'weather',
-    description: 'Get the current weather for a given location. Can use user location if no location specified.',
+    name: 'check_google_connection',
+    description: 'Check if user is connected and working.',
     inputSchema: {
       type: 'object',
-      properties: {
-        location: { 
-          type: 'string', 
-          description: 'Location to get the weather for (e.g., "Bali", "London"). Optional if user_location is provided.' 
-        }
-      }
+      properties: {}
     }
   },
+  // Contact search tool
   {
     name: 'search_contact',
     description: 'Search for a contact email address by searching through Gmail history. Finds people the user has emailed with. Use this when you need to find someone\'s email address.',
@@ -67,6 +63,7 @@ const TOOLS = [
       required: ['name']
     }
   },
+  // Email sending tool
   {
     name: 'send_email',
     description: 'Send an email via Gmail. Use search_contact tool first to find recipient email addresses by name. Emails are sent immediately.',
@@ -109,14 +106,7 @@ const TOOLS = [
       required: ['to', 'subject', 'body']
     }
   },
-  {
-    name: 'check_google_connection',
-    description: 'Check if Google Calendar is connected and working.',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
+  // Calendar management tools
   {
     name: 'create_calendar_event',
     description: 'Create a new event in Google Calendar. Use the detected timezone from system context.',
@@ -218,8 +208,7 @@ const TOOLS = [
       required: ['schema_name', 'query']
     }
   },
-
-  //seacrh
+  //seacrh web tools
   {
     name: 'web_search',
     description: 'Search the internet using Tavily AI. Returns web results with AI-generated summary, relevant content snippets, and images. Perfect for answering questions, finding information, or researching topics. Use this when user asks to search, look up, or find information online.',
@@ -295,7 +284,7 @@ const TOOLS = [
       required: ['query']
     }
   },
-  
+  // Google Maps tools
   ...googleMapsTools
 ];
 
@@ -306,18 +295,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
-  weather: async (args) => {
-    const { location, user_location } = args;
-    
-    if (user_location) {
-      console.error(`⚡ MCP: Executing weather tool with user location: ${user_location.lat}, ${user_location.lng}`);
-    } else if (location) {
-      console.error(`⚡ MCP: Executing weather tool for location: ${location}`);
-    } else {
-      console.error(`⚡ MCP: Executing weather tool without location`);
-    }
-    
-    const result = await weatherTool({ location, user_location });
+  check_google_connection: async (args) => {
+    console.error(`⚡ MCP: Checking Google connection for user: ${args.user_id}`);
+    const result = await checkGoogleConnectionTool({ userId: args.user_id });
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
@@ -354,14 +334,6 @@ const toolHandlers = {
       replyTo
     });
     
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }]
-    };
-  },
-
-  check_google_connection: async (args) => {
-    console.error(`⚡ MCP: Checking Google connection for user: ${args.user_id}`);
-    const result = await checkGoogleConnectionTool({ userId: args.user_id });
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
