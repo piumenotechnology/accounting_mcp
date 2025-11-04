@@ -333,8 +333,8 @@ router.post('/', async (req, res) => {
 
     const responseData = {
       conversation_id: conversationId,
-      message: response.message,
-      message_summariz: summariz,
+      message: summariz,
+      message_raw: response.message,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
@@ -511,13 +511,13 @@ function formatStructuredData(toolResults, user_location) {
     // Format web search results
     if (tool === 'web_search' && data.success) {
       result.search_results = {
-        query: data.data.query,
-        answer: data.data.answer || null, // AI-generated summary
+        // query: data.data.query,
+        // answer: data.data.answer || null, // AI-generated summary
         results: data.data.results?.map((item, index) => ({
           index: index + 1,
           title: item.title,
           url: item.url,
-          content: item.content, // Excerpt/snippet
+          // content: item.content, // Excerpt/snippet
           score: item.score,
           published_date: item.published_date || null
         })) || [],
@@ -529,13 +529,13 @@ function formatStructuredData(toolResults, user_location) {
     // Format news search results
     if (tool === 'news_search' && data.success) {
       result.news_results = {
-        query: data.data.query,
-        answer: data.data.answer || null, // AI summary of news
+        // query: data.data.query,
+        // answer: data.data.answer || null, // AI summary of news
         articles: data.data.articles?.map((article, index) => ({
           index: index + 1,
           title: article.title,
           url: article.url,
-          content: article.content,
+          // content: article.content,
           published_date: article.published_date,
           source: article.source,
           score: article.score
@@ -547,13 +547,13 @@ function formatStructuredData(toolResults, user_location) {
     // Format deep search results
     if (tool === 'deep_search' && data.success) {
       result.research_results = {
-        query: data.data.query,
-        answer: data.data.answer || null, // Comprehensive AI summary
+        // query: data.data.query,
+        // answer: data.data.answer || null, // Comprehensive AI summary
         results: data.data.results?.map((item, index) => ({
           index: index + 1,
           title: item.title,
           url: item.url,
-          content: item.content,
+          // content: item.content,
           score: item.score,
           published_date: item.published_date || null
         })) || [],
