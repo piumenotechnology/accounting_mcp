@@ -4,6 +4,10 @@ import { authModels } from '../models/user.models.js'
 import AIOrchestrator from '../services/ai-orchestrator.js'; // Adjust path
 
 const router = express.Router();
+
+import OpenAI from "openai";
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 const aiOrchestrator = new AIOrchestrator();
 
 // POST /api/chat - Send message and get AI response WITH MEMORY
@@ -252,7 +256,6 @@ const aiOrchestrator = new AIOrchestrator();
 //   return result;
 // }
 
-
 router.post('/', async (req, res) => {
   try {
     const { message, model, user_id, chat_id, user_location } = req.body;
@@ -326,9 +329,12 @@ router.post('/', async (req, res) => {
       ['web_search', 'news_search', 'deep_search'].includes(tool)
     );
 
+    let summariz = await summarizeText(response.message, "medium", "crisp");
+
     const responseData = {
       conversation_id: conversationId,
-      message: response.message,
+      // message: response.message,
+      message: summariz,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
@@ -348,7 +354,8 @@ router.post('/', async (req, res) => {
       await chatModels.saveMessage(
         conversationId,
         'assistant',
-        response.message,
+        // response.message,
+        summariz,
         response.model,
         response.usage?.total_tokens || 0,
         structuredData
@@ -358,7 +365,8 @@ router.post('/', async (req, res) => {
       await chatModels.saveMessage(
         conversationId,
         'assistant',
-        response.message,
+        // response.message,
+        summariz,
         response.model,
         response.usage?.total_tokens || 0
       );
@@ -557,6 +565,28 @@ function formatStructuredData(toolResults, user_location) {
   return result;
 }
 
+async function summarizeText(text, length = "short", tone = "plain") {
+  if (!text || !text.trim()) throw new Error("No text provided for summarization.");
+
+  const systemPrompt = `
+You are a precise summarizer. Summarize the text accurately and clearly.
+Keep all key facts, remove fluff or repetition.
+Target length: ${length}. Desired tone: ${tone}.
+No marketing filler, no lists unless necessary.
+  `.trim();
+
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    max_tokens: 400,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: text }
+    ]
+  });
+
+  return response.choices[0].message.content.trim();
+}
 
 // GET /api/chat/conversations/:user_id - Get all user conversations
 router.get('/conversations/:user_id', async (req, res) => {

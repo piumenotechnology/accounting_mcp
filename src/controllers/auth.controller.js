@@ -90,12 +90,19 @@ export const auth = {
       }
 
       const referral = await referralModels.getReferralUsageByUser(user.id);
+
+      let user_referral = {};
+      if(referral) {
+        user_referral = await referralModels.getUserReferral(user.id);
+      }
             
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
         token,
         refreshToken,
-        referral,
+        referral_status: referral,
+        referral_used: user_referral ? user_referral.referral : null,
+        schema_name: user_referral ? user_referral.schema_name : null,
         googleConnected: cekGoogleConnectedValid // true when we attempted to connect
       });
 

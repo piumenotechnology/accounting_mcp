@@ -167,9 +167,9 @@ export const referralModels = {
     return result.rowCount > 0;
   },
 
-  getScope: async (user_id) => {
+  getUserReferral: async (user_id) => {
     const sql = `
-      SELECT rt.scopes_json AS scopes
+      SELECT rt.referral, rt.schema_name
       FROM referral_token_usages rtu
       JOIN referral_tokens rt ON rtu.referral_token_id = rt.id
       WHERE rtu.user_id = $1
