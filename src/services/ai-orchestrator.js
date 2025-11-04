@@ -194,7 +194,6 @@ MAPS & LOCATION:
 SEARCH:
 - Use web_search for internet queries
 - Use news_search for recent news
-- Use video_search for tutorials
 
 READ-ONLY tools (no confirmation needed):
 - search_contact, list_calendar_events, weather, get_directions, web_search

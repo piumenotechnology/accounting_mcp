@@ -333,8 +333,8 @@ router.post('/', async (req, res) => {
 
     const responseData = {
       conversation_id: conversationId,
-      // message: response.message,
-      message: summariz,
+      message: response.message,
+      message_summariz: summariz,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
@@ -370,6 +370,7 @@ router.post('/', async (req, res) => {
         response.model,
         response.usage?.total_tokens || 0
       );
+
     }
 
     res.json(responseData);

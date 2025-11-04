@@ -64,19 +64,62 @@ export const chatModels = {
   },
 
   // Save message
+  // saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
+  //   const query = `
+  //     INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
+  //     VALUES ($1, $2, $3, $4, $5, $6)
+  //     RETURNING *`;
+  //   try {
+  //     const result = await pool.query(query, [conversation_id, role, content, model, tokens_used,  detailed_content ? JSON.stringify(detailed_content) : null]);
+  //     return result.rows[0];
+  //   } catch (error) {
+  //     console.error('❌ Error in saveMessage:', error.message);
+  //     throw new Error('Failed to save message');
+  //   }
+  // },
+
+
   saveMessage: async (conversation_id, role, content, model = null, tokens_used = 0, detailed_content) => {
-    const query = `
-      INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *`;
-    try {
-      const result = await pool.query(query, [conversation_id, role, content, model, tokens_used,  detailed_content ? JSON.stringify(detailed_content) : null]);
-      return result.rows[0];
-    } catch (error) {
-      console.error('❌ Error in saveMessage:', error.message);
-      throw new Error('Failed to save message');
-    }
-  },
+  const query = `
+    INSERT INTO messages (conversation_id, role, content, model, tokens_used, detailed_content)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *`;
+  try {
+    console.log('💾 Saving message:', {
+      conversation_id,
+      role,
+      content_length: content?.length,
+      model,
+      tokens_used,
+      has_detailed_content: !!detailed_content,
+      detailed_content_keys: detailed_content ? Object.keys(detailed_content) : null
+    });
+    
+    const result = await pool.query(query, [
+      conversation_id, 
+      role, 
+      content, 
+      model, 
+      tokens_used,  
+      detailed_content ? JSON.stringify(detailed_content) : null
+    ]);
+    
+    console.log('✅ Message saved successfully');
+    return result.rows[0];
+  } catch (error) {
+    console.error('❌ Error in saveMessage:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error details:', {
+      conversation_id,
+      role,
+      model,
+      tokens_used,
+      detailed_content_preview: detailed_content ? JSON.stringify(detailed_content).substring(0, 200) : null
+    });
+    throw new Error('Failed to save message: ' + error.message);
+  }
+},
+
 
   // Get conversation history (all messages)
   // getConversationHistory: async (conversation_id) => {
@@ -94,34 +137,65 @@ export const chatModels = {
   //   }
   // },
 
+  // getConversationHistory: async (conversation_id) => {
+  //   const query = `
+  //     SELECT id, role, content, model, tokens_used, created_at, detailed_content
+  //     FROM messages
+  //     WHERE conversation_id = $1
+  //     ORDER BY created_at ASC`;
+  //   try {
+  //     const result = await pool.query(query, [conversation_id]);
+
+  //     // Transform rows
+  //     return result.rows.map(row => {
+  //       let transformed = { ...row };
+
+  //       // If detailed_content contains places, flatten them
+  //       if (row.detailed_content?.places) {
+  //         transformed.places = row.detailed_content.places;
+  //       }
+
+  //       // Remove detailed_content from output
+  //       delete transformed.detailed_content;
+
+  //       return transformed;
+  //     });
+  //   } catch (error) {
+  //     console.error('❌ Error in getConversationHistory:', error.message);
+  //     throw new Error('Failed to fetch conversation history');
+  //   }
+  // },
+
   getConversationHistory: async (conversation_id) => {
-    const query = `
-      SELECT id, role, content, model, tokens_used, created_at, detailed_content
-      FROM messages
-      WHERE conversation_id = $1
-      ORDER BY created_at ASC`;
-    try {
-      const result = await pool.query(query, [conversation_id]);
+  const query = `
+    SELECT id, role, content, model, tokens_used, created_at, detailed_content
+    FROM messages
+    WHERE conversation_id = $1
+    ORDER BY created_at ASC`;
+  try {
+    const result = await pool.query(query, [conversation_id]);
 
-      // Transform rows
-      return result.rows.map(row => {
-        let transformed = { ...row };
+    // Transform rows
+    return result.rows.map(row => {
+      let transformed = { ...row };
 
-        // If detailed_content contains places, flatten them
-        if (row.detailed_content?.places) {
-          transformed.places = row.detailed_content.places;
-        }
+      // If detailed_content exists, spread all its properties
+      if (row.detailed_content && typeof row.detailed_content === 'object') {
+        // Spread all detailed_content properties into transformed
+        Object.assign(transformed, row.detailed_content);
+      }
 
-        // Remove detailed_content from output
-        delete transformed.detailed_content;
+      // Remove detailed_content from output (we've already extracted it)
+      delete transformed.detailed_content;
 
-        return transformed;
-      });
-    } catch (error) {
-      console.error('❌ Error in getConversationHistory:', error.message);
-      throw new Error('Failed to fetch conversation history');
-    }
-  },
+      return transformed;
+    });
+  } catch (error) {
+    console.error('❌ Error in getConversationHistory:', error.message);
+    console.error('Error stack:', error.stack);
+    throw new Error('Failed to fetch conversation history');
+  }
+},
 
 
   // Delete conversation
