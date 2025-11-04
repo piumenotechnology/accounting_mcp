@@ -177,7 +177,7 @@ export const referralModels = {
       LIMIT 1
     `;
     const result = await pool.query(sql, [user_id]);
-    return result.rows[0]?.scopes ?? [];
+    return result.rows[0];
   }
 
 };

@@ -95,6 +95,8 @@ export const auth = {
       if(referral) {
         user_referral = await referralModels.getUserReferral(user.id);
       }
+
+      console.log(user_referral);
             
       res.json({
         user: { id: user.id, name: user.name, email: user.email, picture: user.picture },
