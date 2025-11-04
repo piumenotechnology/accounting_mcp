@@ -23,8 +23,8 @@ export const models = {
     provider: 'openrouter'
   },
   openai: {
-    id: 'openai/gpt-4o-mini',
-    name: 'GPT-4o Mini',
+    id: 'openai/gpt-4.1-mini',
+    name: 'OpenAI GPT-4.1 Mini',
     strengths: 'Creative writing, general conversation',
     cost: '$$',
     provider: 'openrouter'

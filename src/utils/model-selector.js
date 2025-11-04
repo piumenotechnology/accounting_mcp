@@ -33,9 +33,9 @@ export class ModelSelector {
     ];
     
     // Default models
-    this.defaultModel = 'claude';   // Claude for general queries
     this.googleModel = 'openai';    // Gemini for Google services
     this.searchModel = 'openai';     // Grok for search queries 🔍
+    this.defaultModel = 'claude';   // Claude for general queries
   }
   
   selectModel(message) {
