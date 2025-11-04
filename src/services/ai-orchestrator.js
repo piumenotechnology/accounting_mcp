@@ -1,9 +1,8 @@
-// src/services/ai-orchestrator.js - OPTIMIZED VERSION
+// src/services/ai-orchestrator.js - SIMPLIFIED: Let AI decide tools
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
 import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
-import { PROMPTS, PromptDetector } from '../config/system-prompts.js';
 import { pool } from '../config/db.js';
 
 class AIOrchestrator {
@@ -11,8 +10,7 @@ class AIOrchestrator {
     this.mcpClient = new MCPClient();
     this.modelSelector = new ModelSelector();
     this.client = openRouterClient;
-
-    this.schemaCache = new Map(); //new schema cache
+    this.schemaCache = new Map();
   }
 
   getSchemaFromCache(user_id, schema_name) {
@@ -37,7 +35,6 @@ class AIOrchestrator {
   }
 
   async fetchSchemaStructure(user_id, schema_name) {
-    // Check access
     const accessCheck = await pool.query(
       'SELECT user_has_schema_access($1, $2) as has_access',
       [user_id, schema_name]
@@ -47,7 +44,6 @@ class AIOrchestrator {
       return null;
     }
     
-    // Get structure
     const structure = await pool.query(`
       SELECT 
         t.table_name,
@@ -73,7 +69,6 @@ class AIOrchestrator {
 
   async getDatabaseContext(user_id) {
     try {
-      // 1. Get user's schemas
       const schemasResult = await pool.query(
         'SELECT * FROM get_user_schemas($1)',
         [user_id]
@@ -85,7 +80,6 @@ class AIOrchestrator {
         return null;
       }
       
-      // 2. Get structure for each schema (cached!)
       const structures = {};
       
       for (const schema of schemas) {
@@ -111,6 +105,103 @@ class AIOrchestrator {
       console.error('❌ Failed to get database context:', error);
       return null;
     }
+  }
+
+  /**
+   * Build a minimal, context-aware system message
+   * Only includes what's relevant based on actual data availability
+   */
+  async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo) {
+    let systemContent = `Current date and time:
+- Date: ${timeInfo.localDate}
+- Time: ${timeInfo.localTime}
+- Timezone: ${timezone}
+
+User: ${user_name}
+
+You are a helpful AI assistant with access to various tools.
+Use tools when needed to provide accurate, helpful responses.`;
+
+    // Only add location context if user has location
+    if (user_location && user_location.lat && user_location.lng) {
+      systemContent += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USER LOCATION AVAILABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Location: ${user_location.lat}, ${user_location.lng}
+
+For location-based queries, use these coordinates automatically.
+Don't ask "where are you?" - the location is provided above.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    }
+
+    // Only add database context if user has database access
+    const dbContext = await this.getDatabaseContext(user_id);
+    if (dbContext && dbContext.schemas.length > 0) {
+      systemContent += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DATABASE ACCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You have access to the following databases:
+
+`;
+      
+      for (const schema of dbContext.schemas) {
+        const structure = dbContext.structures[schema.schema_name];
+        systemContent += `\n**${schema.schema_name}** (${schema.client_name})\n`;
+        
+        if (structure) {
+          for (const table of structure) {
+            systemContent += `  • ${table.table_name}\n`;
+            let columnsArray = table.columns;
+            if (typeof columnsArray === 'string') {
+              try {
+                columnsArray = JSON.parse(columnsArray);
+              } catch (e) {
+                columnsArray = [];
+              }
+            }
+            const cols = columnsArray.map(c => c.name).join(', ');
+            systemContent += `    Columns: ${cols}\n`;
+          }
+        }
+      }
+      
+      systemContent += `
+For payment queries: Use payment_xero table with SUM(total)
+For itemized details: Use bank_transaction table
+Always use parameterized queries with ILIKE for name matching.`;
+    }
+
+    // Add essential tool usage guidelines
+    systemContent += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOOL USAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EMAILS & CALENDAR:
+- Before sending emails or creating events: Show preview, wait for confirmation
+- For multiple contacts: Show numbered list, wait for selection
+- Sign emails with: "Best regards, ${user_name}"
+
+MAPS & LOCATION:
+- Use specific queries: "fitness center gym" not just "gym"
+- Location is automatically provided for location tools
+
+SEARCH:
+- Use web_search for internet queries
+- Use news_search for recent news
+- Use video_search for tutorials
+
+READ-ONLY tools (no confirmation needed):
+- search_contact, list_calendar_events, weather, get_directions, web_search
+
+Choose the right tools based on the user's question.`;
+
+    return systemContent;
   }
   
   async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null, user_name) {
@@ -150,13 +241,13 @@ class AIOrchestrator {
       console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
     }
     
-    // Step 2: Get MCP tools
+    // Step 2: Get MCP tools - ALL OF THEM
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
     
     console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
     
-    // Step 3: Convert MCP tools to OpenAI format
+    // Step 3: Convert MCP tools to OpenAI format - PASS ALL TOOLS
     const tools = mcpTools.tools.map(tool => ({
       type: 'function',
       function: {
@@ -166,12 +257,12 @@ class AIOrchestrator {
       }
     }));
     
-    // Step 4: Process with OpenRouter (pass location)
+    // Step 4: Process with OpenRouter
     return await this.processWithOpenRouter(
       message, 
       user_id, 
       modelConfig.id, 
-      tools, 
+      tools, // Pass ALL tools - let AI decide!
       conversationHistory,
       user_location,
       user_name
@@ -186,77 +277,19 @@ class AIOrchestrator {
       timezone = getTimezoneFromCoordinates(user_location.lat, user_location.lng);
     }
 
-    // Get current time in user's timezone
     const timeInfo = getCurrentTimeInTimezone(timezone);
     
-    // ═══════════════════════════════════════════════════════════════
-    // 🚀 COST OPTIMIZATION: Detect what prompts are needed
-    // ═══════════════════════════════════════════════════════════════
-    
-    const needsLocation = user_location && PromptDetector.needsLocationTools(message);
-    const needsEmail = PromptDetector.needsEmailTools(message);
-    const needsCalendar = PromptDetector.needsCalendarTools(message);
-    //new database context detection
-    const needsDatabase = PromptDetector.needsDatabaseTools(message);
-
-    console.log('🎯 Prompt optimization:');
-    console.log(`   Location prompt: ${needsLocation ? '✅' : '❌'}`);
-    console.log(`   Email prompt: ${needsEmail ? '✅' : '❌'}`);
-    console.log(`   Calendar prompt: ${needsCalendar ? '✅' : '❌'}`);
-    console.log(`   Database: ${needsDatabase ? '✅' : '❌'}`);
-
-
-    // ═══════════════════════════════════════════════════════════════
-    // 🚀 NEW: Pre-load database context if needed
-    // ═══════════════════════════════════════════════════════════════
-  
-    let databaseContext = null;
-    
-    if (needsDatabase) {
-      databaseContext = await this.getDatabaseContext(user_id);
-    }
-    
-    // ═══════════════════════════════════════════════════════════════
-    // 🧩 Build modular system prompt (only include what's needed)
-    // ═══════════════════════════════════════════════════════════════
-    
-    let systemContent = PROMPTS.BASE(timeInfo, timezone, user_name);
-    
-    if (needsLocation) {
-      systemContent += '\n\n' + PROMPTS.LOCATION(user_location);
-    }
-    
-    if (needsEmail) {
-      systemContent += '\n\n' + PROMPTS.EMAIL(user_name);
-    }
-    
-    if (needsCalendar) {
-      systemContent += '\n\n' + PROMPTS.CALENDAR(timezone);
-    }
-
-    if (needsDatabase && databaseContext) {
-      systemContent += '\n\n' + PROMPTS.DATABASE(databaseContext);
-    }
-    
-    // Calculate token estimate (rough: 1 token ≈ 4 chars)
-    const estimatedTokens = Math.ceil(systemContent.length / 4);
-    console.log(`📝 System prompt: ${systemContent.length} chars (~${estimatedTokens} tokens)`);
-    
-    // ═══════════════════════════════════════════════════════════════
-    // 🔧 Filter tools to only relevant ones
-    // ═══════════════════════════════════════════════════════════════
-    
-    const relevantTools = PromptDetector.filterRelevantTools(
-      tools, 
-      message, 
-      needsLocation, 
-      needsEmail, 
-      needsCalendar,
-      needsDatabase //new parameter
+    // Build minimal, context-aware system message
+    const systemContent = await this.buildSystemMessage(
+      user_id, 
+      user_name, 
+      user_location, 
+      timezone, 
+      timeInfo
     );
     
-    console.log(`🔧 Tools filtered: ${relevantTools.length}/${tools.length} included`);
-    console.log(`   Tools: ${relevantTools.map(t => t.function.name).join(', ')}`);
+    const estimatedTokens = Math.ceil(systemContent.length / 4);
+    console.log(`📝 System prompt: ${systemContent.length} chars (~${estimatedTokens} tokens)`);
     
     // Build system message
     const systemMessage = {
@@ -277,7 +310,7 @@ class AIOrchestrator {
     
     let toolsCalled = [];
     let toolResults = [];
-    let maxIterations = 10; // For disambiguation + confirmation flows
+    let maxIterations = 10;
     
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       console.log(`🔄 Iteration ${iteration + 1}`);
@@ -285,17 +318,15 @@ class AIOrchestrator {
       const response = await this.client.chat.completions.create({
         model: modelId,
         messages: messages,
-        tools: relevantTools, // 🚀 Only pass relevant tools!
-        tool_choice: 'auto'
+        tools: tools, // ALL tools available - AI decides which to use!
+        tool_choice: 'auto' // Let AI decide
       });
       
       const choice = response.choices[0];
       console.log(`🤖 Finish reason: ${choice.finish_reason}`);
 
       if (choice.message.tool_calls) {
-        console.log(`🔧 AI wants to call tools:`, choice.message.tool_calls.map(t => t.function.name));
-      } else {
-        console.log(`💬 AI responded without tools:`, choice.message.content?.substring(0, 100));
+        console.log(`🔧 AI chose tools:`, choice.message.tool_calls.map(t => t.function.name));
       }
       
       // No tool calls - return final answer
@@ -328,8 +359,6 @@ class AIOrchestrator {
           }
         } catch (parseError) {
           console.error('❌ Failed to parse tool arguments:', parseError.message);
-          console.error('   Raw arguments:', toolCall.function.arguments);
-          console.error('   Tool name:', toolCall.function.name);
           functionArgs = {};
           console.log('⚠️ Using empty arguments object as fallback');
         }
@@ -371,54 +400,17 @@ class AIOrchestrator {
           arguments: functionArgs
         });
 
-        // Safe result preview
-        // try {
-        //   const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
-        //   const preview = resultText.substring(0, 200);
-        //   console.log(`✅ Tool result:`, preview + (resultText.length > 200 ? '...' : ''));
-        // } catch (err) {
-        //   console.log(`✅ Tool result received (preview failed):`, err.message);
-        // }
-
-        // Store tool results for structured data
-        try {
-          const resultText = toolResult?.content?.[0]?.text;
-          if (resultText) {
-            const parsedResult = JSON.parse(resultText);
-            toolResults.push({
-              tool: toolCall.function.name,
-              data: parsedResult
-            });
-            console.log(`📦 Stored result from ${toolCall.function.name}`);
-          }
-        } catch (parseErr) {
-          console.log('⚠️ Could not parse tool result for structured data');
-        }
-        
-        // Add assistant message with tool call
-        // messages.push(choice.message);
-
         let toolResultContent;
   
         if (toolResult.content && Array.isArray(toolResult.content)) {
-          // MCP format: { content: [{ type: 'text', text: '...' }] }
           toolResultContent = toolResult.content[0]?.text || JSON.stringify(toolResult.content);
         } else if (typeof toolResult === 'string') {
-          // Already a string
           toolResultContent = toolResult;
         } else {
-          // Fallback: stringify the whole thing
           toolResultContent = JSON.stringify(toolResult);
         }
         
         console.log(`📤 Sending tool result (${toolResultContent.length} chars)`);
-        
-        // // Add tool result
-        // messages.push({
-        //   role: 'tool',
-        //   tool_call_id: toolCall.id,
-        //   content: JSON.stringify(toolResult.content)
-        // });
 
         messages.push({
           role: 'assistant',

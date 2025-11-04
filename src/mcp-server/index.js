@@ -215,6 +215,83 @@ const TOOLS = [
       required: ['schema_name', 'query']
     }
   },
+
+  //seacrh
+  {
+    name: 'web_search',
+    description: 'Search the internet for text results and images. Returns web pages with descriptions and relevant images. Use this for general knowledge questions, current events, factual information, or when user asks to "search" or "look up" something.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (e.g., "latest AI trends", "how to make pasta", "Eiffel Tower")'
+        },
+        search_type: {
+          type: 'string',
+          enum: ['general', 'text', 'images'],
+          description: 'Type of search: "general" (text + images), "text" (only text), "images" (only images)',
+          default: 'general'
+        },
+        count: {
+          type: 'number',
+          description: 'Number of results to return (1-20)',
+          default: 5,
+          minimum: 1,
+          maximum: 20
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'news_search',
+    description: 'Search for recent news articles. Use this when user asks about current events, breaking news, or recent happenings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'News search query (e.g., "latest tech news", "climate change updates")'
+        },
+        count: {
+          type: 'number',
+          description: 'Number of articles to return (1-20)',
+          default: 5,
+          minimum: 1,
+          maximum: 20
+        },
+        freshness: {
+          type: 'string',
+          enum: ['pd', 'pw', 'pm'],
+          description: 'Time range: "pd" (past day), "pw" (past week), "pm" (past month)',
+          default: 'pw'
+        }
+      },
+      required: ['query']
+    }
+  },
+  // {
+  //   name: 'video_search',
+  //   description: 'Search for videos from YouTube and other platforms. Use when user wants to find tutorials, entertainment, or video content.',
+  //   inputSchema: {
+  //     type: 'object',
+  //     properties: {
+  //       query: {
+  //         type: 'string',
+  //         description: 'Video search query (e.g., "how to cook steak", "funny cat videos")'
+  //       },
+  //       count: {
+  //         type: 'number',
+  //         description: 'Number of videos to return (1-20)',
+  //         default: 5,
+  //         minimum: 1,
+  //         maximum: 20
+  //       }
+  //     },
+  //     required: ['query']
+  //   }
+  // },
   
   ...googleMapsTools
 ];
@@ -350,6 +427,39 @@ const toolHandlers = {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
   },
+
+  web_search: async (args) => {
+    const { query, search_type = 'general', count = 5 } = args;
+    console.error(`⚡ MCP: Web search for: "${query}" (type: ${search_type})`);
+    
+    const result = await webSearchTool({ query, search_type, count });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  news_search: async (args) => {
+    const { query, count = 5, freshness = 'pw' } = args;
+    console.error(`⚡ MCP: News search for: "${query}"`);
+    
+    const result = await newsSearchTool({ query, count, freshness });
+    
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
+
+  // video_search: async (args) => {
+  //   const { query, count = 5 } = args;
+  //   console.error(`⚡ MCP: Video search for: "${query}"`);
+    
+  //   const result = await videoSearchTool({ query, count });
+    
+  //   return {
+  //     content: [{ type: 'text', text: JSON.stringify(result) }]
+  //   };
+  // },
   
   ...googleMapsHandlers
 };

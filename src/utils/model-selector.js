@@ -1,4 +1,4 @@
-// src/utils/model-selector.js
+// src/utils/model-selector.js - WITH SEARCH DETECTION
 export class ModelSelector {
   constructor() {
     // Keywords that indicate Google service usage
@@ -22,10 +22,18 @@ export class ModelSelector {
       // Drive (future)
       'drive', 'document', 'sheet', 'file'
     ];
+
+    // 🆕 Search keywords (for general web search)
+    this.searchKeywords = [
+      'search', 'look up', 'find information',
+      'google', 'what is', 'who is', 'when did',
+      'latest', 'recent', 'current', 'news',
+      'images of', 'pictures of', 'photos of', 'videos of',
+      'how to', 'tutorial', 'learn about', 'explain'
+    ];
     
     // Default models
     this.defaultModel = 'claude';  // Claude for general queries
-    // this.defaultModel = 'grock'; // Grock for general queries (to optimize cost)
     this.googleModel = 'gemini';   // Gemini for Google services
   }
   
@@ -36,10 +44,22 @@ export class ModelSelector {
     const isGoogleRelated = this.googleKeywords.some(keyword => 
       messageLower.includes(keyword)
     );
+
+    // 🆕 Check if message contains search-related keywords
+    // Note: Search tools work with any model, but we prioritize Google for Google services
+    const isSearchQuery = this.searchKeywords.some(keyword =>
+      messageLower.includes(keyword)
+    );
     
     if (isGoogleRelated) {
       console.log(`🎯 Google-related query detected → Using ${this.googleModel}`);
       return this.googleModel;
+    }
+
+    // 🆕 For pure search queries (no Google services), use default model
+    if (isSearchQuery) {
+      console.log(`🎯 Search query detected → Using ${this.defaultModel}`);
+      return this.defaultModel;
     }
     
     console.log(`🎯 General query → Using ${this.defaultModel}`);
@@ -71,6 +91,12 @@ export class ModelSelector {
     const messageLower = message.toLowerCase();
     return calendarKeywords.some(keyword => messageLower.includes(keyword));
   }
+
+  // 🆕 Search query detection
+  isSearchQuery(message) {
+    const messageLower = message.toLowerCase();
+    return this.searchKeywords.some(keyword => messageLower.includes(keyword));
+  }
   
   getModelReasoning(message) {
     const messageLower = message.toLowerCase();
@@ -98,6 +124,15 @@ export class ModelSelector {
         keywords: this.googleKeywords.filter(k => messageLower.includes(k))
       };
     }
+
+    // 🆕 Search queries
+    if (this.isSearchQuery(message)) {
+      return {
+        model: this.defaultModel,
+        reason: 'Search query (look up, find information, current events)',
+        keywords: this.searchKeywords.filter(k => messageLower.includes(k))
+      };
+    }
     
     return {
       model: this.defaultModel,
@@ -110,5 +145,6 @@ export class ModelSelector {
 // Example usage:
 // const selector = new ModelSelector();
 // const model = selector.selectModel("Send email to John"); // → gemini
+// const model = selector.selectModel("Search for latest AI news"); // → claude (with search tools)
 // const model = selector.selectModel("Explain quantum physics"); // → claude
-// const model = selector.selectModel("Find gyms near me"); // → gemini
+// const model = selector.selectModel("Find gyms near me"); // → gemini (Maps)
