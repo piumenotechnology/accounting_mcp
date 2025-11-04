@@ -1,4 +1,4 @@
-// src/utils/model-selector.js - WITH SEARCH DETECTION
+// src/utils/model-selector.js - WITH SEARCH DETECTION (GROK FOR SEARCH)
 export class ModelSelector {
   constructor() {
     // Keywords that indicate Google service usage
@@ -23,43 +23,43 @@ export class ModelSelector {
       'drive', 'document', 'sheet', 'file'
     ];
 
-    // 🆕 Search keywords (for general web search)
+    // Search keywords (for web search queries)
     this.searchKeywords = [
-      'search', 'look up', 'find information',
-      'google', 'what is', 'who is', 'when did',
-      'latest', 'recent', 'current', 'news',
-      'images of', 'pictures of', 'photos of', 'videos of',
-      'how to', 'tutorial', 'learn about', 'explain'
+      'search', 'look up', 'find information', 'search for',
+      'google', 'what is', 'who is', 'when did', 'where is',
+      'latest', 'recent', 'current', 'news', 'trending',
+      'images of', 'pictures of', 'photos of',
+      'how to', 'tutorial', 'learn about', 'explain', 'tell me about'
     ];
     
     // Default models
-    this.defaultModel = 'claude';  // Claude for general queries
-    this.googleModel = 'gemini';   // Gemini for Google services
+    this.defaultModel = 'claude';   // Claude for general queries
+    this.googleModel = 'gemini';    // Gemini for Google services
+    this.searchModel = 'grock';     // Grok for search queries 🔍
   }
   
   selectModel(message) {
     const messageLower = message.toLowerCase();
     
-    // Check if message contains any Google-related keywords
-    const isGoogleRelated = this.googleKeywords.some(keyword => 
+    // 🔍 PRIORITY 1: Check for search queries FIRST
+    // (Before checking Google keywords, since some overlap like "search")
+    const isSearchQuery = this.searchKeywords.some(keyword =>
       messageLower.includes(keyword)
     );
-
-    // 🆕 Check if message contains search-related keywords
-    // Note: Search tools work with any model, but we prioritize Google for Google services
-    const isSearchQuery = this.searchKeywords.some(keyword =>
+    
+    if (isSearchQuery) {
+      console.log(`🔍 Search query detected → Using ${this.searchModel}`);
+      return this.searchModel;
+    }
+    
+    // Check if message contains any Google service keywords
+    const isGoogleRelated = this.googleKeywords.some(keyword => 
       messageLower.includes(keyword)
     );
     
     if (isGoogleRelated) {
       console.log(`🎯 Google-related query detected → Using ${this.googleModel}`);
       return this.googleModel;
-    }
-
-    // 🆕 For pure search queries (no Google services), use default model
-    if (isSearchQuery) {
-      console.log(`🎯 Search query detected → Using ${this.defaultModel}`);
-      return this.defaultModel;
     }
     
     console.log(`🎯 General query → Using ${this.defaultModel}`);
@@ -101,6 +101,15 @@ export class ModelSelector {
   getModelReasoning(message) {
     const messageLower = message.toLowerCase();
     
+    // 🔍 PRIORITY 1: Check search queries first
+    if (this.isSearchQuery(message)) {
+      return {
+        model: this.searchModel,
+        reason: 'Search query detected (web search, information lookup)',
+        keywords: this.searchKeywords.filter(k => messageLower.includes(k))
+      };
+    }
+    
     if (this.isMapsQuery(message)) {
       return {
         model: this.googleModel,
@@ -124,15 +133,6 @@ export class ModelSelector {
         keywords: this.googleKeywords.filter(k => messageLower.includes(k))
       };
     }
-
-    // 🆕 Search queries
-    if (this.isSearchQuery(message)) {
-      return {
-        model: this.defaultModel,
-        reason: 'Search query (look up, find information, current events)',
-        keywords: this.searchKeywords.filter(k => messageLower.includes(k))
-      };
-    }
     
     return {
       model: this.defaultModel,
@@ -144,7 +144,7 @@ export class ModelSelector {
 
 // Example usage:
 // const selector = new ModelSelector();
+// const model = selector.selectModel("Search for latest AI news"); // → grock 🔍
 // const model = selector.selectModel("Send email to John"); // → gemini
-// const model = selector.selectModel("Search for latest AI news"); // → claude (with search tools)
 // const model = selector.selectModel("Explain quantum physics"); // → claude
 // const model = selector.selectModel("Find gyms near me"); // → gemini (Maps)

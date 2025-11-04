@@ -25,6 +25,9 @@ import { googleMapsHandlers } from './handlers/maps.handlers.js';
 // Database tool
 import { executeQueryTool } from './tools/database.tool.js';
 
+// New search tools using Tavily API
+import { webSearchTool, newsSearchTool, deepSearchTool } from './tools/search.tool.js';
+
 // Create MCP server
 const server = new Server({
   name: 'multi-tool-server',
@@ -219,26 +222,25 @@ const TOOLS = [
   //seacrh
   {
     name: 'web_search',
-    description: 'Search the internet for text results and images. Returns web pages with descriptions and relevant images. Use this for general knowledge questions, current events, factual information, or when user asks to "search" or "look up" something.',
+    description: 'Search the internet using Tavily AI. Returns web results with AI-generated summary, relevant content snippets, and images. Perfect for answering questions, finding information, or researching topics. Use this when user asks to search, look up, or find information online.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Search query (e.g., "latest AI trends", "how to make pasta", "Eiffel Tower")'
+          description: 'Search query (e.g., "latest AI developments", "how to cook pasta", "climate change solutions")'
         },
-        search_type: {
-          type: 'string',
-          enum: ['general', 'text', 'images'],
-          description: 'Type of search: "general" (text + images), "text" (only text), "images" (only images)',
-          default: 'general'
+        include_images: {
+          type: 'boolean',
+          description: 'Whether to include images in results',
+          default: true
         },
-        count: {
+        max_results: {
           type: 'number',
-          description: 'Number of results to return (1-20)',
+          description: 'Maximum number of results to return (1-10)',
           default: 5,
           minimum: 1,
-          maximum: 20
+          maximum: 10
         }
       },
       required: ['query']
@@ -246,52 +248,53 @@ const TOOLS = [
   },
   {
     name: 'news_search',
-    description: 'Search for recent news articles. Use this when user asks about current events, breaking news, or recent happenings.',
+    description: 'Search for recent news articles using Tavily. Returns news articles with AI-generated summary. Use this when user asks about current events, breaking news, or recent happenings.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'News search query (e.g., "latest tech news", "climate change updates")'
+          description: 'News search query (e.g., "tech industry layoffs", "climate summit", "AI regulations")'
         },
-        count: {
+        days: {
           type: 'number',
-          description: 'Number of articles to return (1-20)',
+          description: 'How many days back to search (1=today, 7=past week, 30=past month)',
+          default: 7,
+          minimum: 1,
+          maximum: 30
+        },
+        max_results: {
+          type: 'number',
+          description: 'Maximum number of articles to return (1-10)',
           default: 5,
           minimum: 1,
-          maximum: 20
-        },
-        freshness: {
-          type: 'string',
-          enum: ['pd', 'pw', 'pm'],
-          description: 'Time range: "pd" (past day), "pw" (past week), "pm" (past month)',
-          default: 'pw'
+          maximum: 10
         }
       },
       required: ['query']
     }
   },
-  // {
-  //   name: 'video_search',
-  //   description: 'Search for videos from YouTube and other platforms. Use when user wants to find tutorials, entertainment, or video content.',
-  //   inputSchema: {
-  //     type: 'object',
-  //     properties: {
-  //       query: {
-  //         type: 'string',
-  //         description: 'Video search query (e.g., "how to cook steak", "funny cat videos")'
-  //       },
-  //       count: {
-  //         type: 'number',
-  //         description: 'Number of videos to return (1-20)',
-  //         default: 5,
-  //         minimum: 1,
-  //         maximum: 20
-  //       }
-  //     },
-  //     required: ['query']
-  //   }
-  // },
+  {
+    name: 'deep_search',
+    description: 'Perform comprehensive research using Tavily advanced search. Returns detailed results with AI summary and more sources. Use this for research tasks, detailed analysis, or when user needs comprehensive information on a topic.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Research query (e.g., "impact of renewable energy", "machine learning applications", "sustainable agriculture")'
+        },
+        max_results: {
+          type: 'number',
+          description: 'Maximum number of results to return (1-15)',
+          default: 10,
+          minimum: 1,
+          maximum: 15
+        }
+      },
+      required: ['query']
+    }
+  },
   
   ...googleMapsTools
 ];
@@ -428,11 +431,11 @@ const toolHandlers = {
     };
   },
 
-  web_search: async (args) => {
-    const { query, search_type = 'general', count = 5 } = args;
-    console.error(`⚡ MCP: Web search for: "${query}" (type: ${search_type})`);
+ web_search: async (args) => {
+    const { query, include_images = true, max_results = 5 } = args;
+    console.error(`⚡ MCP: Web search for: "${query}"`);
     
-    const result = await webSearchTool({ query, search_type, count });
+    const result = await webSearchTool({ query, include_images, max_results });
     
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
@@ -440,26 +443,26 @@ const toolHandlers = {
   },
 
   news_search: async (args) => {
-    const { query, count = 5, freshness = 'pw' } = args;
-    console.error(`⚡ MCP: News search for: "${query}"`);
+    const { query, days = 7, max_results = 5 } = args;
+    console.error(`⚡ MCP: News search for: "${query}" (${days} days)`);
     
-    const result = await newsSearchTool({ query, count, freshness });
+    const result = await newsSearchTool({ query, days, max_results });
     
     return {
       content: [{ type: 'text', text: JSON.stringify(result) }]
     };
   },
 
-  // video_search: async (args) => {
-  //   const { query, count = 5 } = args;
-  //   console.error(`⚡ MCP: Video search for: "${query}"`);
+  deep_search: async (args) => {
+    const { query, max_results = 10 } = args;
+    console.error(`⚡ MCP: Deep search for: "${query}"`);
     
-  //   const result = await videoSearchTool({ query, count });
+    const result = await deepSearchTool({ query, max_results });
     
-  //   return {
-  //     content: [{ type: 'text', text: JSON.stringify(result) }]
-  //   };
-  // },
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
+    };
+  },
   
   ...googleMapsHandlers
 };
