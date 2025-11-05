@@ -390,12 +390,15 @@ const toolHandlers = {
   execute_query: async (args) => {
     const { user_id, schema_name, query, params = [] } = args;
     console.error(`⚡ MCP: Executing query on ${schema_name} for user: ${user_id}`);
+
+    const userMessage = args.user_message || '';
     
     const result = await executeQueryTool({
       userId: user_id,
       schema_name,
       query,
-      params
+      params,
+      user_question: userMessage 
     });
     
     return {

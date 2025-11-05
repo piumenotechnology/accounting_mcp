@@ -3,7 +3,7 @@
 import {pool as db} from '../../config/db.js';
 import { QueryValidator } from './query-validator.js';
 
-export async function executeQueryTool({ userId, schema_name, query, params = [] }) {
+export async function executeQueryTool({ userId, schema_name, query, params = [], user_question = '' }) {
   // 1. Check access
   const accessCheck = await db.query(
     'SELECT user_has_schema_access($1, $2) as has_access',
@@ -62,7 +62,8 @@ export async function executeQueryTool({ userId, schema_name, query, params = []
       query: safeQuery,
       rows: result.rows,
       rowCount: result.rowCount,
-      executionTime: `${executionTime}ms`
+      executionTime: `${executionTime}ms`,
+      user_question
     };
     
   } catch (error) {

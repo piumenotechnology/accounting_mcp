@@ -376,6 +376,11 @@ Choose the right tools based on the user's question.`;
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
           functionArgs.user_id = user_id;
+          
+            if (toolCall.function.name === 'execute_query') {
+              functionArgs.user_message = message;
+            }
+
         }
 
         // Inject USER_LOCATION for location-based tools
