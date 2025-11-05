@@ -192,13 +192,13 @@ async function formatStructuredData(toolResults, user_location) {
           if (vizPayload.visual) {
             // ⭐ ONLY return visualization, no raw data
             result.visualization = {
-              default_visual: vizPayload.visual,
-              default_type: vizPayload.default,
+              // default_visual: vizPayload.visual,
+              // default_type: vizPayload.default,
               variants: vizPayload.variants || [],
-              ai_reasoning: vizPayload.content // AI's explanation
+              // ai_reasoning: vizPayload.content // AI's explanation
             };
             
-            console.log('✅ Visualization generated:', vizPayload.default);
+            // console.log('✅ Visualization generated:', vizPayload.default);
           }
         } catch (vizError) {
           console.error('❌ AI Visualization error:', vizError);
