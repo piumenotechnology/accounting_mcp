@@ -176,12 +176,40 @@ async function formatStructuredData(toolResults, user_location) {
     //   }
     // }
 
+    // if (tool === 'execute_query' && data.rows) {
+    //   // ✨ AI-POWERED VISUALIZATION
+    //   if (data.rows && data.rows.length > 0) {
+    //     try {
+    //       console.log('🎨 Generating AI-powered visualizations...');
+          
+    //       const vizPayload = await aiVisualizer.generateVisualization({
+    //         rows: data.rows,
+    //         query: data.query,
+    //         userQuestion: data.user_question || '',
+    //         schema_name: data.schema_name
+    //       });
+          
+    //       if (vizPayload.visual) {
+    //         // ⭐ ONLY return visualization, no raw data
+    //         result.visualization = {
+    //           // default_visual: vizPayload.visual,
+    //           // default_type: vizPayload.default,
+    //           variants: vizPayload.variants || [],
+    //           // ai_reasoning: vizPayload.content // AI's explanation
+    //         };
+            
+    //         // console.log('✅ Visualization generated:', vizPayload.default);
+    //       }
+    //     } catch (vizError) {
+    //       console.error('❌ AI Visualization error:', vizError);
+    //       result.visualization_error = vizError.message;
+    //     }
+    //   }
+    // }
+
     if (tool === 'execute_query' && data.rows) {
-      // ✨ AI-POWERED VISUALIZATION
       if (data.rows && data.rows.length > 0) {
         try {
-          console.log('🎨 Generating AI-powered visualizations...');
-          
           const vizPayload = await aiVisualizer.generateVisualization({
             rows: data.rows,
             query: data.query,
@@ -190,18 +218,15 @@ async function formatStructuredData(toolResults, user_location) {
           });
           
           if (vizPayload.visual) {
-            // ⭐ ONLY return visualization, no raw data
             result.visualization = {
-              // default_visual: vizPayload.visual,
-              // default_type: vizPayload.default,
+              default_visual: vizPayload.visual,
+              default_type: vizPayload.default,
               variants: vizPayload.variants || [],
-              // ai_reasoning: vizPayload.content // AI's explanation
+              ai_reasoning: vizPayload.content
             };
-            
-            // console.log('✅ Visualization generated:', vizPayload.default);
           }
         } catch (vizError) {
-          console.error('❌ AI Visualization error:', vizError);
+          console.error('❌ Visualization error:', vizError);
           result.visualization_error = vizError.message;
         }
       }
