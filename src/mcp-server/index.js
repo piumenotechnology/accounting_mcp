@@ -4,8 +4,6 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { countTool } from './tools/counter.tool.js';
-import { weatherTool } from './tools/weather.tool.js';
 import { DatabaseService } from '../services/database.service.js';
 
 // Initialize database service
@@ -13,7 +11,7 @@ const dbService = new DatabaseService();
 
 // Create MCP server
 const server = new Server({
-  name: 'data-analysis-server',
+  name: 'data-analysis-server-smart',
   version: '1.0.0'
 }, {
   capabilities: {
@@ -21,43 +19,11 @@ const server = new Server({
   }
 });
 
-// Define all tools
+// Tools with sample_table_data as optional safety net
 const TOOLS = [
   {
-    name: 'count',
-    description: 'Count from start number to end number. Returns an array of numbers.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        start: {
-          type: 'number',
-          description: 'Starting number'
-        },
-        end: {
-          type: 'number',
-          description: 'Ending number'
-        }
-      },
-      required: ['start', 'end']
-    }
-  },
-  {
-    name: 'weather',
-    description: 'Get the current weather for a given location.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        location: {
-          type: 'string',
-          description: 'Location to get the weather for'
-        }
-      },
-      required: ['location']
-    }
-  },
-    {
     name: 'execute_query',
-    description: 'Execute a SQL SELECT query on the user database and get real data. Only SELECT queries are allowed. The query will be automatically limited for safety. This is the MAIN tool you need to actually get data from the database.',
+    description: 'Execute a SQL SELECT query on the user database and get real data. Only SELECT queries are allowed. This is the main tool to get data after you decide which table to use.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -67,11 +33,11 @@ const TOOLS = [
         },
         query: {
           type: 'string',
-          description: 'SQL SELECT query to execute. Do not include LIMIT clause (automatically added). Example: SELECT * FROM customers WHERE state = \'CA\''
+          description: 'SQL SELECT query to execute. Do not include LIMIT (automatically added).'
         },
         limit: {
           type: 'number',
-          description: 'Maximum number of rows to return (default: 100, max: 1000)',
+          description: 'Maximum rows to return (default: 100, max: 1000)',
           default: 100
         }
       },
@@ -80,7 +46,7 @@ const TOOLS = [
   },
   {
     name: 'get_field_query',
-    description: 'Get a pre-built SQL query for a specific field based on query rules. Use this when the user asks about a field that has pre-configured query logic (complex JOINs, aggregations, etc). The field names are listed in your system prompt under "AVAILABLE FIELDS".',
+    description: 'Get pre-built SQL query for a specific field based on query rules. Use when user asks about a pre-configured field listed in AVAILABLE FIELDS.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -90,10 +56,33 @@ const TOOLS = [
         },
         fieldName: {
           type: 'string',
-          description: 'Field name to get query for (must match a field from AVAILABLE FIELDS in your system prompt)'
+          description: 'Field name from AVAILABLE FIELDS in system prompt'
         }
       },
       required: ['userId', 'fieldName']
+    }
+  },
+  {
+    name: 'sample_table_data',
+    description: 'Get sample rows from a specific table. ONLY USE THIS if you are truly unsure which table to query after analyzing the sample data already provided in your system prompt. This is a safety net - prefer using the samples already in your context.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: {
+          type: 'string',
+          description: 'User ID'
+        },
+        tableName: {
+          type: 'string',
+          description: 'Name of the table to sample'
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of rows to return (default: 5)',
+          default: 5
+        }
+      },
+      required: ['userId', 'tableName']
     }
   }
 ];
@@ -105,28 +94,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
-  count: async (args) => {
-    console.error(`⚡ MCP: Executing count tool: ${args.start} to ${args.end}`);
-    const result = await countTool({ start: args.start, end: args.end });
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result)
-      }]
-    };
-  },
-  
-  weather: async (args) => {
-    console.error(`⚡ MCP: Executing weather tool for location: ${args.location}`);
-    const result = await weatherTool({ location: args.location });
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(result)
-      }]
-    };
-  },
-  
   execute_query: async (args) => {
     console.error(`⚡ MCP: Executing query for user ${args.userId}`);
     console.error(`   Query: ${args.query.substring(0, 100)}...`);
@@ -155,6 +122,26 @@ const toolHandlers = {
     
     if (result.success) {
       console.error(`   ✅ Query built successfully`);
+    } else {
+      console.error(`   ❌ Error: ${result.error}`);
+    }
+    
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result)
+      }]
+    };
+  },
+  
+  sample_table_data: async (args) => {
+    console.error(`⚡ MCP: Sampling table "${args.tableName}" (user ${args.userId})`);
+    
+    const limit = Math.min(args.limit || 5, 20);
+    const result = await dbService.sampleSpecificTable(args.userId, args.tableName, limit);
+    
+    if (result.success) {
+      console.error(`   ✅ Retrieved ${result.row_count} sample rows`);
     } else {
       console.error(`   ❌ Error: ${result.error}`);
     }
@@ -201,8 +188,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ MCP Data Analysis Server started successfully');
-  console.error('📊 Database tools enabled');
+  console.error('✅ MCP Smart Data Analysis Server started');
+  console.error('🧠 AI reasoning with sample data enabled');
+  console.error('🔧 Available tools: execute_query, get_field_query, sample_table_data');
 }
 
 main().catch(error => {

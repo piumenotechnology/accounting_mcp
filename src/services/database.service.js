@@ -1,12 +1,11 @@
 // // src/services/database.service.js - OPTIMIZED (No redundant tool calls)
-// import { Pool } from 'pg';
 import dotenv from 'dotenv';
-dotenv.config();
 import { Pool } from 'pg';
+
+dotenv.config();
 
 export class DatabaseService {
   constructor() {
-    // Try to connect using either connection string or individual parameters
     try {
       if (process.env.POSTGRES_URL) {
         this.pool = new Pool({
@@ -39,9 +38,8 @@ export class DatabaseService {
     
     this.schemaCache = new Map();
     this.rulesCache = new Map();
-    this.cacheTTL = 5 * 60 * 1000; // 5 minutes
+    this.cacheTTL = 5 * 60 * 1000;
     
-    // Test connection on startup
     this.testConnection();
   }
 
@@ -106,7 +104,6 @@ export class DatabaseService {
 
       console.log(`🔍 Fetching schema info for ${schemaName}...`);
 
-      // Fetch schema structure
       const schemaResult = await this.pool.query(`
         SELECT 
           t.table_name,
@@ -124,7 +121,6 @@ export class DatabaseService {
         ORDER BY t.table_name
       `, [schemaName]);
 
-      // Fetch available fields with rules
       const fieldsResult = await this.pool.query(`
         SELECT field_name, description, source_table
         FROM public.query_rules
@@ -153,6 +149,89 @@ export class DatabaseService {
     } catch (error) {
       console.error('❌ Error fetching schema:', error.message);
       throw error;
+    }
+  }
+
+  async getTableSamples(userId, rowsPerTable = 3) {
+    try {
+      const userSchema = await this.getUserSchema(userId);
+      const schemaName = userSchema.schema_name;
+      
+      const cacheKey = `samples:${userId}:${schemaName}`;
+      const cached = this.getFromCache(cacheKey);
+      if (cached) {
+        console.log(`📦 Using cached samples for ${schemaName}`);
+        return cached;
+      }
+
+      console.log(`🔍 Fetching sample data from ${schemaName}...`);
+      
+      const schemaInfo = await this.getCompleteSchemaInfo(userId);
+      const samples = {};
+      
+      const client = await this.pool.connect();
+      try {
+        await client.query(`SET search_path TO "${schemaName}", public`);
+        
+        for (const table of schemaInfo.tables) {
+          try {
+            const result = await client.query(`
+              SELECT * FROM ${table.name} 
+              LIMIT ${rowsPerTable}
+            `);
+            samples[table.name] = result.rows;
+            console.log(`   ✅ ${table.name}: ${result.rows.length} sample rows`);
+          } catch (error) {
+            console.log(`   ⚠️  ${table.name}: Could not fetch samples (${error.message})`);
+            samples[table.name] = [];
+          }
+        }
+      } finally {
+        client.release();
+      }
+
+      this.cache(cacheKey, samples);
+      return samples;
+    } catch (error) {
+      console.error('❌ Error fetching samples:', error.message);
+      return {};
+    }
+  }
+
+  async sampleSpecificTable(userId, tableName, limit = 5) {
+    const client = await this.pool.connect();
+    
+    try {
+      const userSchema = await this.getUserSchema(userId);
+      const schemaName = userSchema.schema_name;
+      
+      console.log(`🔍 Sampling table: ${tableName} (${limit} rows)`);
+      
+      await client.query(`SET search_path TO "${schemaName}", public`);
+      
+      const result = await client.query(`
+        SELECT * FROM ${tableName} 
+        LIMIT ${limit}
+      `);
+      
+      console.log(`   ✅ Retrieved ${result.rows.length} sample rows`);
+      
+      return {
+        success: true,
+        table_name: tableName,
+        sample_rows: result.rows,
+        row_count: result.rows.length,
+        columns: result.fields?.map(f => f.name) || []
+      };
+    } catch (error) {
+      console.error(`   ❌ Error sampling ${tableName}: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+        table_name: tableName
+      };
+    } finally {
+      client.release();
     }
   }
 
@@ -199,7 +278,6 @@ export class DatabaseService {
       const userSchema = await this.getUserSchema(userId);
       const schemaName = userSchema.schema_name;
 
-      // Check for dangerous operations
       const dangerousPatterns = [
         /DROP\s+(?:TABLE|SCHEMA|DATABASE)/i,
         /DELETE\s+FROM/i,
@@ -216,7 +294,6 @@ export class DatabaseService {
         }
       }
 
-      // Must start with SELECT
       if (!query.trim().toUpperCase().startsWith('SELECT')) {
         return { valid: false, error: 'Only SELECT queries are allowed' };
       }
@@ -228,10 +305,10 @@ export class DatabaseService {
   }
 
   /**
-   * Execute query - FIXED to properly set search_path
+   * FIXED: Proper LIMIT handling - don't add LIMIT if query already has it
    */
   async executeQuery(userId, query, limit = 100) {
-    const client = await this.pool.connect(); // Get dedicated client for transaction
+    const client = await this.pool.connect();
     
     try {
       console.log(`⚡ Executing query for user ${userId}`);
@@ -247,18 +324,28 @@ export class DatabaseService {
         return { success: false, error: validation.error };
       }
 
-      // CRITICAL FIX: Set search_path so tables are found in user's schema
+      // Set search_path
       await client.query(`SET search_path TO "${schemaName}", public`);
       console.log(`   🔍 Search path set to: "${schemaName}", public`);
 
-      // Execute with limit
-      const limitedQuery = query.trim().endsWith(';') 
-        ? query.trim().slice(0, -1) + ` LIMIT ${limit};`
-        : `${query} LIMIT ${limit}`;
-        
-      console.log(`   📝 Query: ${limitedQuery.substring(0, 100)}...`);
+      // CRITICAL FIX: Check if query already has LIMIT
+      const trimmedQuery = query.trim().replace(/;$/, ''); // Remove trailing semicolon
+      const hasLimit = /LIMIT\s+\d+\s*$/i.test(trimmedQuery);
       
-      const result = await client.query(limitedQuery);
+      let finalQuery;
+      if (hasLimit) {
+        // Query already has LIMIT, use as-is
+        finalQuery = trimmedQuery;
+        console.log(`   ℹ️  Query already has LIMIT clause`);
+      } else {
+        // Add LIMIT
+        finalQuery = `${trimmedQuery} LIMIT ${limit}`;
+        console.log(`   ℹ️  Added LIMIT ${limit} to query`);
+      }
+        
+      console.log(`   📝 Query: ${finalQuery.substring(0, 100)}...`);
+      
+      const result = await client.query(finalQuery);
 
       console.log(`   ✅ Success: ${result.rows.length} rows returned`);
 
@@ -274,15 +361,14 @@ export class DatabaseService {
     } catch (error) {
       console.error(`   ❌ Query execution error: ${error.message}`);
       
-      // Provide helpful error message
       let errorMessage = error.message;
       if (error.message.includes('does not exist')) {
-        errorMessage = `${error.message}. Check that the table exists in your schema or check the AVAILABLE TABLES in the system prompt.`;
+        errorMessage = `${error.message}. Please check the table name and available tables in your schema.`;
       }
       
       return { success: false, error: errorMessage };
     } finally {
-      client.release(); // Always release the client back to pool
+      client.release();
     }
   }
 
@@ -292,22 +378,18 @@ export class DatabaseService {
       
       const rules = await this.getFieldRules(userId, fieldName);
       
-      // Start with source table
       let query = `SELECT ${rules.source_column} FROM ${rules.source_table}`;
 
-      // Add joins if needed
       if (rules.joins_required && rules.joins_required.length > 0) {
         for (const join of rules.joins_required) {
           query += ` ${join.type} ${join.table} ON ${join.on}`;
         }
       }
 
-      // Add transformations (filters)
       if (rules.transformations) {
         query += ` ${rules.transformations}`;
       }
 
-      // Add aggregation if provided
       if (rules.aggregation_hint) {
         query += ` ${rules.aggregation_hint}`;
       }
