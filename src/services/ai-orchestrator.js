@@ -229,6 +229,7 @@ When building queries:
 3. Only SELECT queries are allowed
 4. If a query fails, explain the error and try a corrected version
 5. When uncertain about schema, refer to the tables listed above
+6. use ilike to find something
 
 # EXAMPLE QUERIES
 
