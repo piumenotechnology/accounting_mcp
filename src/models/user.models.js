@@ -63,6 +63,22 @@ export const authModels = {
         }
     },
     getActiveUser: async () => {
-        
+       const query = `SELECT 
+                        u.name,
+                        COUNT(*) AS total_chat,
+                        MAX(m.created_at) AS last_message_at
+                        FROM messages m
+                        JOIN conversations c ON c.id = m.conversation_id
+                        JOIN users u ON u.id = c.user_id
+                        WHERE m."role" = 'user'
+                        GROUP BY u.name
+                        ORDER BY last_message_at DESC`
+        try {
+            const result = await pool.query(query)
+            return result.rows
+        } catch (error) {
+            console.error('❌ Error in getActiveUser:', error.message)
+            throw new Error('Database query failed');
+        } 
     }
 }
