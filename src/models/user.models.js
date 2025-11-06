@@ -61,5 +61,8 @@ export const authModels = {
             console.error('❌ Error in getAllUsers:', error.message);
             throw new Error('Database query failed');
         }
+    },
+    getActiveUser: async () => {
+        
     }
 }

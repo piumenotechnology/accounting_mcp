@@ -1,6 +1,7 @@
 import { pool } from '../config/db.js';
 
 export const chatModels = {
+  
   // Create new conversation
   createConversation: async (user_id, model, title = 'New Chat') => {
     const query = `
@@ -78,83 +79,36 @@ export const chatModels = {
     }
   },
 
-
-  // Get conversation history (all messages)
-  // getConversationHistory: async (conversation_id) => {
-  //   const query = `
-  //     SELECT id, role, content, model, tokens_used, created_at, detailed_content
-  //     FROM messages
-  //     WHERE conversation_id = $1
-  //     ORDER BY created_at ASC`;
-  //   try {
-  //     const result = await pool.query(query, [conversation_id]);
-  //     return result.rows;
-  //   } catch (error) {
-  //     console.error('❌ Error in getConversationHistory:', error.message);
-  //     throw new Error('Failed to fetch conversation history');
-  //   }
-  // },
-
-  // getConversationHistory: async (conversation_id) => {
-  //   const query = `
-  //     SELECT id, role, content, model, tokens_used, created_at, detailed_content
-  //     FROM messages
-  //     WHERE conversation_id = $1
-  //     ORDER BY created_at ASC`;
-  //   try {
-  //     const result = await pool.query(query, [conversation_id]);
-
-  //     // Transform rows
-  //     return result.rows.map(row => {
-  //       let transformed = { ...row };
-
-  //       // If detailed_content contains places, flatten them
-  //       if (row.detailed_content?.places) {
-  //         transformed.places = row.detailed_content.places;
-  //       }
-
-  //       // Remove detailed_content from output
-  //       delete transformed.detailed_content;
-
-  //       return transformed;
-  //     });
-  //   } catch (error) {
-  //     console.error('❌ Error in getConversationHistory:', error.message);
-  //     throw new Error('Failed to fetch conversation history');
-  //   }
-  // },
-
   getConversationHistory: async (conversation_id) => {
-  const query = `
-    SELECT id, role, content, model, tokens_used, created_at, detailed_content
-    FROM messages
-    WHERE conversation_id = $1
-    ORDER BY created_at ASC`;
-  try {
-    const result = await pool.query(query, [conversation_id]);
+    const query = `
+      SELECT id, role, content, model, tokens_used, created_at, detailed_content
+      FROM messages
+      WHERE conversation_id = $1
+      ORDER BY created_at ASC`;
+    try {
+      const result = await pool.query(query, [conversation_id]);
 
-    // Transform rows
-    return result.rows.map(row => {
-      let transformed = { ...row };
+      // Transform rows
+      return result.rows.map(row => {
+        let transformed = { ...row };
 
-      // If detailed_content exists, spread all its properties
-      if (row.detailed_content && typeof row.detailed_content === 'object') {
-        // Spread all detailed_content properties into transformed
-        Object.assign(transformed, row.detailed_content);
-      }
+        // If detailed_content exists, spread all its properties
+        if (row.detailed_content && typeof row.detailed_content === 'object') {
+          // Spread all detailed_content properties into transformed
+          Object.assign(transformed, row.detailed_content);
+        }
 
-      // Remove detailed_content from output (we've already extracted it)
-      delete transformed.detailed_content;
+        // Remove detailed_content from output (we've already extracted it)
+        delete transformed.detailed_content;
 
-      return transformed;
-    });
-  } catch (error) {
-    console.error('❌ Error in getConversationHistory:', error.message);
-    console.error('Error stack:', error.stack);
-    throw new Error('Failed to fetch conversation history');
-  }
-},
-
+        return transformed;
+      });
+    } catch (error) {
+      console.error('❌ Error in getConversationHistory:', error.message);
+      console.error('Error stack:', error.stack);
+      throw new Error('Failed to fetch conversation history');
+    }
+  },
 
   // Delete conversation
   deleteConversation: async (conversation_id, user_id) => {
@@ -171,21 +125,6 @@ export const chatModels = {
     }
   },
 
-  // Update conversation title
-  // updateConversationTitle: async (conversation_id, user_id, title, favorite) => {
-  //   const query = `
-  //     UPDATE conversations 
-  //     SET title = $1, favorite = $2, updated_at = NOW()
-  //     WHERE id = $3 AND user_id = $4
-  //     RETURNING *`;
-  //   try {
-  //     const result = await pool.query(query, [title, favorite, conversation_id, user_id]);
-  //     return result.rows[0];
-  //   } catch (error) {
-  //     console.error('❌ Error in updateConversationTitle:', error.message);
-  //     throw new Error('Failed to update conversation title');
-  //   }
-  // }
   updateConversationDetails: async (conversation_id, user_id, { title, favorite }) => {
   try {
     const fields = [];

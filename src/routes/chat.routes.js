@@ -155,57 +155,7 @@ async function formatStructuredData(toolResults, user_location) {
   for (const toolResult of toolResults || []) {
     const { tool, data } = toolResult;
 
-        // ========================================================================
     // DATABASE TOOLS - ADD THIS SECTION
-    // ========================================================================
-    
-    // if (tool === 'execute_query' && data.rows) {
-    //   result.database_results = {
-    //     schema: data.schema_name,
-    //     query: data.query,
-    //     row_count: data.rowCount,
-    //     execution_time: data.executionTime,
-    //     rows: data.rows, // The actual SQL result rows
-    //     columns: data.rows.length > 0 ? Object.keys(data.rows[0]) : []
-    //   };
-      
-    //   // If there was an error
-    //   if (data.error) {
-    //     result.database_results.error = data.error;
-    //     result.database_results.hint = data.hint;
-    //   }
-    // }
-
-    // if (tool === 'execute_query' && data.rows) {
-    //   // ✨ AI-POWERED VISUALIZATION
-    //   if (data.rows && data.rows.length > 0) {
-    //     try {
-    //       console.log('🎨 Generating AI-powered visualizations...');
-          
-    //       const vizPayload = await aiVisualizer.generateVisualization({
-    //         rows: data.rows,
-    //         query: data.query,
-    //         userQuestion: data.user_question || '',
-    //         schema_name: data.schema_name
-    //       });
-          
-    //       if (vizPayload.visual) {
-    //         // ⭐ ONLY return visualization, no raw data
-    //         result.visualization = {
-    //           // default_visual: vizPayload.visual,
-    //           // default_type: vizPayload.default,
-    //           variants: vizPayload.variants || [],
-    //           // ai_reasoning: vizPayload.content // AI's explanation
-    //         };
-            
-    //         // console.log('✅ Visualization generated:', vizPayload.default);
-    //       }
-    //     } catch (vizError) {
-    //       console.error('❌ AI Visualization error:', vizError);
-    //       result.visualization_error = vizError.message;
-    //     }
-    //   }
-    // }
 
     if (tool === 'execute_query' && data.rows) {
       if (data.rows && data.rows.length > 0) {
@@ -233,9 +183,9 @@ async function formatStructuredData(toolResults, user_location) {
     }
 
 
-    // ========================================================================
+
     // MAPS TOOLS
-    // ========================================================================
+
     
     // Format places from search_places
     if (tool === 'search_places' && data.results && data.results.length > 0) {
@@ -347,9 +297,9 @@ async function formatStructuredData(toolResults, user_location) {
       };
     }
     
-    // ========================================================================
+
     // SEARCH TOOLS (Tavily)
-    // ========================================================================
+
     
     // Format web search results
     if (tool === 'web_search' && data.success) {
@@ -512,7 +462,5 @@ router.patch('/:chat_id/details', async (req, res) => {
     res.status(500).json({ error: 'Failed to update conversation details' });
   }
 });
-
-
 
 export default router;
