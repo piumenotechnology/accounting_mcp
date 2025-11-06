@@ -99,7 +99,7 @@ router.post('/', async (req, res) => {
     const responseData = {
       conversation_id: conversationId,
       message: summariz,
-      message_raw: response.message,
+      // message_raw: response.message,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
@@ -310,7 +310,7 @@ async function formatStructuredData(toolResults, user_location) {
           index: index + 1,
           title: item.title,
           url: item.url,
-          // content: item.content, // Excerpt/snippet
+          content: item.content, // Excerpt/snippet
           score: item.score,
           published_date: item.published_date || null
         })) || [],
@@ -328,7 +328,7 @@ async function formatStructuredData(toolResults, user_location) {
           index: index + 1,
           title: article.title,
           url: article.url,
-          // content: article.content,
+          content: article.content,
           published_date: article.published_date,
           source: article.source,
           score: article.score
@@ -346,7 +346,7 @@ async function formatStructuredData(toolResults, user_location) {
           index: index + 1,
           title: item.title,
           url: item.url,
-          // content: item.content,
+          content: item.content,
           score: item.score,
           published_date: item.published_date || null
         })) || [],
