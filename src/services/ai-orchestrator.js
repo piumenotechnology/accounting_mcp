@@ -313,7 +313,8 @@ Remember: You're helping users understand their data. Be conversational, helpful
             toolsCalled: toolsCalled,
             model: model,
             iterations: iteration + 1,
-            userId: userId
+            userId: userId,
+            usage: response.usage
           };
         }
         
