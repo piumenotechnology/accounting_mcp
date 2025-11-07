@@ -5,6 +5,11 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { DatabaseService } from '../services/database.service.js';
+import { tavily } from '@tavily/core'; 
+import dotenv from 'dotenv';
+dotenv.config()
+
+const tavilyClient = tavily({ apiKey: process.env.TAVILY_API_KEY }); 
 
 // Initialize database service
 const dbService = new DatabaseService();
@@ -84,6 +89,27 @@ const TOOLS = [
       },
       required: ['userId', 'tableName']
     }
+  },
+
+  //web 
+   {
+    name: 'web_search',
+    description: 'Search the web for current information, industry benchmarks, or external data that might help answer the user question. Use when the database alone is insufficient.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query to find relevant web information'
+        },
+        max_results: {
+          type: 'number',
+          description: 'Maximum number of results to return (default: 5)',
+          default: 5
+        }
+      },
+      required: ['query']
+    }
   }
 ];
 
@@ -152,6 +178,49 @@ const toolHandlers = {
         text: JSON.stringify(result)
       }]
     };
+  },
+
+  web_search: async (args) => {
+    console.error(`⚡ MCP: Web search for "${args.query}"`);
+    
+    try {
+      const response = await tavilyClient.search(args.query, {
+        maxResults: args.max_results || 5,
+        searchDepth: 'basic',
+        includeAnswer: true
+      });
+      
+      console.error(`   ✅ Found ${response.results.length} results`);
+      
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            answer: response.answer,
+            results: response.results.map(r => ({
+              title: r.title,
+              url: r.url,
+              content: r.content,
+              score: r.score
+            }))
+          })
+        }]
+      };
+      
+    } catch (error) {
+      console.error(`   ❌ Search error: ${error.message}`);
+      
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: false,
+            error: error.message
+          })
+        }]
+      };
+    }
   }
 };
 
