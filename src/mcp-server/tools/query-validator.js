@@ -1,4 +1,4 @@
-// NEW FILE: src/mcp-server/tools/query-validator.js
+// src/mcp-server/tools/query-validator.js
 
 export class QueryValidator {
   
@@ -33,9 +33,17 @@ export class QueryValidator {
   }
   
   static addSafetyLimits(query, maxRows = 1000) {
-    if (!query.toUpperCase().includes('LIMIT')) {
-      query += ` LIMIT ${maxRows}`;
+    // ✅ FIX: Remove trailing semicolon before adding LIMIT
+    let cleanQuery = query.trim();
+    if (cleanQuery.endsWith(';')) {
+      cleanQuery = cleanQuery.slice(0, -1).trim();
     }
-    return query;
+    
+    // Add LIMIT if not present
+    if (!cleanQuery.toUpperCase().includes('LIMIT')) {
+      cleanQuery += ` LIMIT ${maxRows}`;
+    }
+    
+    return cleanQuery;
   }
 }
