@@ -182,11 +182,7 @@ async function formatStructuredData(toolResults, user_location) {
       }
     }
 
-
-
     // MAPS TOOLS
-
-    
     // Format places from search_places
     if (tool === 'search_places' && data.results && data.results.length > 0) {
       result.places = data.results.map((place, index) => ({
@@ -299,8 +295,6 @@ async function formatStructuredData(toolResults, user_location) {
     
 
     // SEARCH TOOLS (Tavily)
-
-    
     // Format web search results
     if (tool === 'web_search' && data.success) {
       result.search_results = {
@@ -331,8 +325,9 @@ async function formatStructuredData(toolResults, user_location) {
           content: article.content,
           published_date: article.published_date,
           source: article.source,
-          score: article.score
+          score: article.score,
         })) || [],
+        images : data.data.images,
         days: data.data.days
       };
     }
