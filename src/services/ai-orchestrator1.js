@@ -1,9 +1,9 @@
-// src/services/ai-orchestrator.js - COMPLETE WITH ALL FEATURES
+// src/services/ai-orchestrator.js - SIMPLIFIED: Let AI decide tools
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
 import { getTimezoneFromCoordinates, getCurrentTimeInTimezone } from './timezone-service.js';
-import DatabaseService from './database.service.js';
+import { pool } from '../config/db.js';
 
 class AIOrchestrator {
   constructor() {
@@ -11,28 +11,94 @@ class AIOrchestrator {
     this.modelSelector = new ModelSelector();
     this.client = openRouterClient;
     this.schemaCache = new Map();
-    this.dbService = DatabaseService;
+  }
+
+  getSchemaFromCache(user_id, schema_name) {
+    const key = `${user_id}:${schema_name}`;
+    const cached = this.schemaCache.get(key);
+    
+    if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+      console.log(`📦 Using cached schema: ${schema_name}`);
+      return cached.data;
+    }
+    
+    return null;
+  }
+
+  cacheSchema(user_id, schema_name, data) {
+    const key = `${user_id}:${schema_name}`;
+    this.schemaCache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+    console.log(`💾 Cached schema: ${schema_name}`);
+  }
+
+  async fetchSchemaStructure(user_id, schema_name) {
+    const accessCheck = await pool.query(
+      'SELECT user_has_schema_access($1, $2) as has_access',
+      [user_id, schema_name]
+    );
+    
+    if (!accessCheck.rows[0].has_access) {
+      return null;
+    }
+    
+    const structure = await pool.query(`
+      SELECT 
+        t.table_name,
+        json_agg(
+          json_build_object(
+            'name', c.column_name,
+            'type', c.data_type,
+            'nullable', c.is_nullable = 'YES'
+          ) ORDER BY c.ordinal_position
+        ) as columns
+      FROM information_schema.tables t
+      JOIN information_schema.columns c 
+        ON t.table_name = c.table_name 
+        AND t.table_schema = c.table_schema
+      WHERE t.table_schema = $1
+        AND t.table_type = 'BASE TABLE'
+      GROUP BY t.table_name
+      ORDER BY t.table_name
+    `, [schema_name]);
+    
+    return structure.rows;
   }
 
   async getDatabaseContext(user_id) {
     try {
-      const schemaInfo = await this.dbService.getCompleteSchemaInfo(user_id);
+      const schemasResult = await pool.query(
+        'SELECT * FROM get_user_schemas($1)',
+        [user_id]
+      );
       
-      if (!schemaInfo || !schemaInfo.tables || schemaInfo.tables.length === 0) {
+      const schemas = schemasResult.rows;
+      
+      if (schemas.length === 0) {
         return null;
       }
       
-      // Format for our use
+      const structures = {};
+      
+      for (const schema of schemas) {
+        const cachedStructure = this.getSchemaFromCache(user_id, schema.schema_name);
+        
+        if (cachedStructure) {
+          structures[schema.schema_name] = cachedStructure;
+        } else {
+          const structure = await this.fetchSchemaStructure(user_id, schema.schema_name);
+          if (structure) {
+            structures[schema.schema_name] = structure;
+            this.cacheSchema(user_id, schema.schema_name, structure);
+          }
+        }
+      }
+      
       return {
-        schemas: [{
-          schema_name: schemaInfo.schema_name,
-          client_name: schemaInfo.client_name,
-          referral: schemaInfo.referral
-        }],
-        structures: {
-          [schemaInfo.schema_name]: schemaInfo.tables
-        },
-        available_fields: schemaInfo.available_fields || []
+        schemas,
+        structures
       };
       
     } catch (error) {
@@ -41,29 +107,108 @@ class AIOrchestrator {
     }
   }
 
-  formatDatabaseWithSamples(dbContext, samples) {
-    let output = 'AVAILABLE TABLES WITH SAMPLE DATA:\n';
-    
-    for (const schema of dbContext.schemas) {
-      const structure = dbContext.structures[schema.schema_name];
+  /**
+   * Build a minimal, context-aware system message
+   * Only includes what's relevant based on actual data availability
+   */
+//   async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo) {
+//     let systemContent = `Current date and time:
+// - Date: ${timeInfo.localDate}
+// - Time: ${timeInfo.localTime}
+// - Timezone: ${timezone}
+
+// User: ${user_name}
+
+// You are a helpful AI assistant with access to various tools.
+// Use tools when needed to provide accurate, helpful responses.`;
+
+//     // Only add location context if user has location
+//     if (user_location && user_location.lat && user_location.lng) {
+//       systemContent += `
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// USER LOCATION AVAILABLE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Location: ${user_location.lat}, ${user_location.lng}
+
+// For location-based queries, use these coordinates automatically.
+// Don't ask "where are you?" - the location is provided above.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+//     }
+
+//     // Only add database context if user has database access
+//     const dbContext = await this.getDatabaseContext(user_id);
+//     if (dbContext && dbContext.schemas.length > 0) {
+//       systemContent += `
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DATABASE ACCESS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// You have access to the following databases:
+
+// `;
       
-      for (const table of structure) {
-        output += `\nTable: ${table.name}\n`;
-        output += `Columns: ${table.columns.map(c => `${c.name} (${c.type})`).join(', ')}\n`;
+//       for (const schema of dbContext.schemas) {
+//         const structure = dbContext.structures[schema.schema_name];
+//         systemContent += `\n**${schema.schema_name}** (${schema.client_name})\n`;
         
-        const sampleData = samples[table.name] || [];
-        output += `Sample Data:\n${sampleData.length > 0 ? JSON.stringify(sampleData, null, 2) : 'No samples'}\n`;
-      }
-    }
-    
-    return output;
-  }
+//         if (structure) {
+//           for (const table of structure) {
+//             systemContent += `  • ${table.table_name}\n`;
+//             let columnsArray = table.columns;
+//             if (typeof columnsArray === 'string') {
+//               try {
+//                 columnsArray = JSON.parse(columnsArray);
+//               } catch (e) {
+//                 columnsArray = [];
+//               }
+//             }
+//             const cols = columnsArray.map(c => c.name).join(', ');
+//             systemContent += `    Columns: ${cols}\n`;
+//           }
+//         }
+//       }
+      
+//       systemContent += `
+// For payment queries: Use payment_xero table with SUM(total)
+// For itemized details: Use bank_transaction table
+// Always use parameterized queries with ILIKE for name matching.`;
+//     }
+
+//     // Add essential tool usage guidelines
+//     systemContent += `
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TOOL USAGE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// EMAILS & CALENDAR:
+// - Before sending emails or creating events: Show preview, wait for confirmation
+// - For multiple contacts: Show numbered list, wait for selection
+// - Sign emails with: "Best regards, ${user_name}"
+
+// MAPS & LOCATION:
+// - Use specific queries: "fitness center gym" not just "gym"
+// - Location is automatically provided for location tools
+
+// SEARCH:
+// - Use web_search for internet queries
+// - Use news_search for recent news
+
+// READ-ONLY tools (no confirmation needed):
+// - search_contact, list_calendar_events, weather, get_directions, web_search
+
+// Choose the right tools based on the user's question.`;
+
+//     return systemContent;
+//   }
 
   /**
-   * Build comprehensive system message with all features
-   */
-  async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo) {
-    let systemContent = `Current date and time:
+ * Build a minimal, context-aware system message
+ * Only includes what's relevant based on actual data availability
+ */
+async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo) {
+  let systemContent = `Current date and time:
     - Date: ${timeInfo.localDate}
     - Time: ${timeInfo.localTime}
     - Timezone: ${timezone}
@@ -73,9 +218,9 @@ class AIOrchestrator {
     You are a helpful AI assistant with access to various tools.
     Use tools when needed to provide accurate, helpful responses.`;
 
-        // Only add location context if user has location
-        if (user_location && user_location.lat && user_location.lng) {
-          systemContent += `
+      // Only add location context if user has location
+      if (user_location && user_location.lat && user_location.lng) {
+        systemContent += `
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     USER LOCATION AVAILABLE
@@ -85,75 +230,49 @@ class AIOrchestrator {
     For location-based queries, use these coordinates automatically.
     Don't ask "where are you?" - the location is provided above.
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-        }
+      }
 
-        // Only add database context if user has database access
-        const dbContext = await this.getDatabaseContext(user_id);
-        if (dbContext && dbContext.schemas.length > 0) {
-          const samples = await this.dbService.getTableSamples(user_id, 3);
+      // Only add database context if user has database access
+      const dbContext = await this.getDatabaseContext(user_id);
+      if (dbContext && dbContext.schemas.length > 0) {
+        systemContent += `
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    DATABASE ACCESS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    You have access to the following databases:
+
+    `;
+        
+        for (const schema of dbContext.schemas) {
+          const structure = dbContext.structures[schema.schema_name];
+          systemContent += `\n**${schema.schema_name}** (${schema.client_name})\n`;
           
-    systemContent += `
-
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    DATABASE ANALYTICS (AUTO-EXECUTION)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    CLIENT: ${dbContext.schemas[0].client_name}
-    SCHEMA: ${dbContext.schemas[0].schema_name}
-
-    ${this.formatDatabaseWithSamples(dbContext, samples)}
-
-    QUERY EXECUTION:
-    - Tool: execute_query(schema_name, query, params)
-    - Only SELECT allowed (read-only, safe)
-    - Execute immediately - no confirmation needed
-    - LIMIT auto-added by system (don't include in query)
-
-    SMART QUERY BUILDING:
-    1. Use exact column names from tables above
-    2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
-    3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
-    4. Sorting: ORDER BY column DESC/ASC
-    5. Execute immediately, answer user
-
-    EXAMPLES:
-
-    User: "How much did John pay?"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
-        params: ['%john%']
-      )
-    → Answer: "John paid $X total"
-
-    User: "Top 5 customers by revenue"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
-        params: []
-      )
-    → Answer with list
-
-    User: "Show transactions for vehicle HV71"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
-        params: ['%HV71%']
-      )
-    → Display results
-
-    EFFICIENCY:
-    - One query should answer 90% of questions
-    - Sample data shows exact structure - use it
-    - Execute immediately when user asks about data
-    - Don't verify or double-check results
-
-    Execute queries autonomously using schema and samples above.
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+          if (structure) {
+            for (const table of structure) {
+              systemContent += `  • ${table.table_name}\n`;
+              let columnsArray = table.columns;
+              if (typeof columnsArray === 'string') {
+                try {
+                  columnsArray = JSON.parse(columnsArray);
+                } catch (e) {
+                  columnsArray = [];
+                }
+              }
+              const cols = columnsArray.map(c => c.name).join(', ');
+              systemContent += `    Columns: ${cols}\n`;
+            }
+          }
         }
+        
+        systemContent += `
+    For payment queries: Use payment_xero table with SUM(total)
+    For itemized details: Use bank_transaction table
+    Always use parameterized queries with ILIKE for name matching.`;
+      }
 
     // Google Tools Workflow
-    systemContent += `
+      systemContent += `
 
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     GOOGLE TOOLS WORKFLOW
@@ -234,14 +353,16 @@ class AIOrchestrator {
     → Execute create_calendar_event
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-    // Maps & Location Tools
+    // Maps
     systemContent += `
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     MAPS & LOCATION TOOLS
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     ${user_location ? `✅ USER LOCATION: ${user_location.lat}, ${user_location.lng}
-    Location is auto-injected for all maps tools - just call them.` : '⚠️ No location available - ask user if needed for maps queries'}
+    Location is auto-injected for all maps tools - just call them.
+    ` : '⚠️ No location available - ask user if needed for maps queries'}
+
     CRITICAL - USE SPECIFIC QUERIES:
     ❌ WRONG: query: "gym" → returns stores selling equipment
     ✅ CORRECT: query: "fitness center gym" → returns actual gyms
@@ -267,7 +388,8 @@ class AIOrchestrator {
     For place details: User asks "tell me about #2" → call get_place_details
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-    // Web Search & News
+    //search
+    // Add this right after the Maps section ends:
     systemContent += `
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     WEB SEARCH & NEWS
@@ -300,19 +422,22 @@ class AIOrchestrator {
     Keep responses concise and directly answer the query.
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
-        // Final tool usage section
-    systemContent += `
+    // Add essential tool usage guidelines
+   systemContent += `
+
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     TOOL USAGE
     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    Choose the right tools based on the user's question.
-    Execute autonomously when appropriate (database queries, searches, read-only operations).
-    Ask confirmation when needed (emails, calendar events, deletions).`;
+    SEARCH:
+    - Use web_search for internet queries
+    - Use news_search for recent news
 
-    return systemContent;
+    Choose the right tools based on the user's question.`;
+
+      return systemContent;
   }
-  
+
   async processMessage(message, user_id, requestedModel = null, conversationHistory = [], user_location = null, user_name) {
     if (!isConfigured) {
       throw new Error('OpenRouter API key not configured');
@@ -371,7 +496,7 @@ class AIOrchestrator {
       message, 
       user_id, 
       modelConfig.id, 
-      tools,
+      tools, // Pass ALL tools - let AI decide!
       conversationHistory,
       user_location,
       user_name
@@ -388,7 +513,7 @@ class AIOrchestrator {
 
     const timeInfo = getCurrentTimeInTimezone(timezone);
     
-    // Build comprehensive system message
+    // Build minimal, context-aware system message
     const systemContent = await this.buildSystemMessage(
       user_id, 
       user_name, 
@@ -427,8 +552,8 @@ class AIOrchestrator {
       const response = await this.client.chat.completions.create({
         model: modelId,
         messages: messages,
-        tools: tools,
-        tool_choice: 'auto'
+        tools: tools, // ALL tools available - AI decides which to use!
+        tool_choice: 'auto' // Let AI decide
       });
       
       const choice = response.choices[0];
@@ -487,9 +612,10 @@ class AIOrchestrator {
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
           functionArgs.user_id = user_id;
           
-          if (toolCall.function.name === 'execute_query') {
-            functionArgs.user_message = message;
-          }
+            if (toolCall.function.name === 'execute_query') {
+              functionArgs.user_message = message;
+            }
+
         }
 
         // Inject USER_LOCATION for location-based tools
