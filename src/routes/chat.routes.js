@@ -169,8 +169,8 @@ async function formatStructuredData(toolResults, user_location) {
           
           if (vizPayload.visual) {
             result.visualization = {
-              default_visual: vizPayload.visual,
-              default_type: vizPayload.default,
+              // default_visual: vizPayload.visual,
+              // default_type: vizPayload.default,
               variants: vizPayload.variants || [],
               ai_reasoning: vizPayload.content
             };
