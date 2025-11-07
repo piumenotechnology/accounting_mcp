@@ -1,39 +1,8 @@
-// src/services/database.service.js - FIXED: Proper LIMIT handling
-// import { Pool } from 'pg';
+// src/services/database.service.js
 import {pool} from '../config/db.js'
 
 export class DatabaseService {
   constructor() {
-  //   try {
-  //     if (process.env.POSTGRES_URL) {
-  //       this.pool = new Pool({
-  //         connectionString: process.env.POSTGRES_URL,
-  //         ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
-  //       });
-  //       console.log('✅ Database: Using POSTGRES_URL connection string');
-  //     } else if (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD) {
-  //       this.pool = new Pool({
-  //         host: process.env.PGHOST,
-  //         port: parseInt(process.env.PGPORT) || 5432,
-  //         user: process.env.PGUSER,
-  //         password: String(process.env.PGPASSWORD),
-  //         database: process.env.PGDATABASE,
-  //         ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
-  //       });
-  //       console.log('✅ Database: Using individual connection parameters');
-  //     } else {
-  //       throw new Error(
-  //         'Database configuration missing. Please set either:\n' +
-  //         '  - POSTGRES_URL=postgresql://user:pass@host:port/db\n' +
-  //         'OR\n' +
-  //         '  - PGHOST, PGUSER, PGPASSWORD, PGDATABASE'
-  //       );
-  //     }
-  //   } catch (error) {
-  //     console.error('❌ Failed to initialize database connection:', error.message);
-  //     throw error;
-  //   }
-
     this.pool = pool;
     this.schemaCache = new Map();
     this.rulesCache = new Map();

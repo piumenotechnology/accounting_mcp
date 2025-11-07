@@ -73,84 +73,81 @@ class AIOrchestrator {
     You are a helpful AI assistant with access to various tools.
     Use tools when needed to provide accurate, helpful responses.`;
 
-        // Only add location context if user has location
-        if (user_location && user_location.lat && user_location.lng) {
+    // Only add location context if user has location
+    if (user_location && user_location.lat && user_location.lng) {
+      systemContent += `
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      USER LOCATION AVAILABLE
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      Location: ${user_location.lat}, ${user_location.lng}
+
+      For location-based queries, use these coordinates automatically.
+      Don't ask "where are you?" - the location is provided above.
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    }
+
+    // Only add database context if user has database access
+    const dbContext = await this.getDatabaseContext(user_id);
+      if (dbContext && dbContext.schemas.length > 0) {
+        const samples = await this.dbService.getTableSamples(user_id, 3);    
           systemContent += `
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          DATABASE ANALYTICS (AUTO-EXECUTION)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    USER LOCATION AVAILABLE
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    Location: ${user_location.lat}, ${user_location.lng}
+          CLIENT: ${dbContext.schemas[0].client_name}
+          SCHEMA: ${dbContext.schemas[0].schema_name}
 
-    For location-based queries, use these coordinates automatically.
-    Don't ask "where are you?" - the location is provided above.
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-        }
+          ${this.formatDatabaseWithSamples(dbContext, samples)}
 
-        // Only add database context if user has database access
-        const dbContext = await this.getDatabaseContext(user_id);
-        if (dbContext && dbContext.schemas.length > 0) {
-          const samples = await this.dbService.getTableSamples(user_id, 3);
-          
-    systemContent += `
+          QUERY EXECUTION:
+          - Tool: execute_query(schema_name, query, params)
+          - Only SELECT allowed (read-only, safe)
+          - Execute immediately - no confirmation needed
+          - LIMIT auto-added by system (don't include in query)
 
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    DATABASE ANALYTICS (AUTO-EXECUTION)
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          SMART QUERY BUILDING:
+          1. Use exact column names from tables above
+          2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
+          3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
+          4. Sorting: ORDER BY column DESC/ASC
+          5. Execute immediately, answer user
 
-    CLIENT: ${dbContext.schemas[0].client_name}
-    SCHEMA: ${dbContext.schemas[0].schema_name}
+          EXAMPLES:
 
-    ${this.formatDatabaseWithSamples(dbContext, samples)}
+          User: "How much did John pay?"
+          → execute_query(
+              schema_name: "${dbContext.schemas[0].schema_name}",
+              query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
+              params: ['%john%']
+            )
+          → Answer: "John paid $X total"
 
-    QUERY EXECUTION:
-    - Tool: execute_query(schema_name, query, params)
-    - Only SELECT allowed (read-only, safe)
-    - Execute immediately - no confirmation needed
-    - LIMIT auto-added by system (don't include in query)
+          User: "Top 5 customers by revenue"
+          → execute_query(
+              schema_name: "${dbContext.schemas[0].schema_name}",
+              query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
+              params: []
+            )
+          → Answer with list
 
-    SMART QUERY BUILDING:
-    1. Use exact column names from tables above
-    2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
-    3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
-    4. Sorting: ORDER BY column DESC/ASC
-    5. Execute immediately, answer user
+          User: "Show transactions for vehicle HV71"
+          → execute_query(
+              schema_name: "${dbContext.schemas[0].schema_name}",
+              query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
+              params: ['%HV71%']
+            )
+          → Display results
 
-    EXAMPLES:
+          EFFICIENCY:
+          - One query should answer 90% of questions
+          - Sample data shows exact structure - use it
+          - Execute immediately when user asks about data
+          - Don't verify or double-check results
 
-    User: "How much did John pay?"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
-        params: ['%john%']
-      )
-    → Answer: "John paid $X total"
-
-    User: "Top 5 customers by revenue"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
-        params: []
-      )
-    → Answer with list
-
-    User: "Show transactions for vehicle HV71"
-    → execute_query(
-        schema_name: "${dbContext.schemas[0].schema_name}",
-        query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
-        params: ['%HV71%']
-      )
-    → Display results
-
-    EFFICIENCY:
-    - One query should answer 90% of questions
-    - Sample data shows exact structure - use it
-    - Execute immediately when user asks about data
-    - Don't verify or double-check results
-
-    Execute queries autonomously using schema and samples above.
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-        }
+          Execute queries autonomously using schema and samples above.
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      }
 
     // Google Tools Workflow
     systemContent += `
