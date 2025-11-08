@@ -419,85 +419,26 @@ const toolHandlers = {
     };
   },
 
-  // get_field_query: async (args) => {
-  //   const { user_id, field_name } = args;
-  //   console.error(`⚡ MCP: Getting query for field "${field_name}" (user: ${user_id})`);
+  get_field_query: async (args) => {
+    const { user_id, field_name } = args;
+    console.error(`⚡ MCP: Getting query for field "${field_name}" (user: ${user_id})`);
     
-  //   // Import DatabaseService at top of file
-  //   const { default: DatabaseService } = await import('../services/database.service.js');
+    // Import DatabaseService at top of file
+    const { default: DatabaseService } = await import('../services/database.service.js');
     
-  //   const result = await DatabaseService.buildQueryForField(user_id, field_name);
+    const result = await DatabaseService.buildQueryForField(user_id, field_name);
     
-  //   if (result.success) {
-  //     console.error(`   ✅ Query built: ${result.query.substring(0, 80)}...`);
-  //   } else {
-  //     console.error(`   ❌ Error: ${result.error}`);
-  //   }
-    
-  //   return {
-  //     content: [{ type: 'text', text: JSON.stringify(result) }]
-  //   };
-  // },
-
-  async getFieldRules(userId, fieldName) {
-  try {
-    const userSchema = await this.getUserSchema(userId);
-    const referral = userSchema.referral;
-
-    const cacheKey = `rules:${referral}:${fieldName}`;
-    const cached = this.getFromCache(cacheKey);
-    if (cached) return cached;
-
-    const result = await this.pool.query(`
-      SELECT *
-      FROM public.query_rules
-      WHERE referral = $1 AND field_name = $2
-    `, [referral, fieldName]);
-
-    if (result.rows.length === 0) {
-      throw new Error(`No rules found for field: ${fieldName}`);
-    }
-
-    const rule = result.rows[0];
-    
-    // FIX: Handle joins_required properly
-    let joinsRequired = [];
-    if (rule.joins_required) {
-      if (typeof rule.joins_required === 'string') {
-        // It's a JSON string, parse it
-        try {
-          joinsRequired = JSON.parse(rule.joins_required);
-        } catch (e) {
-          console.error('Failed to parse joins_required:', e);
-          joinsRequired = [];
-        }
-      } else if (Array.isArray(rule.joins_required)) {
-        // It's already an array (PostgreSQL JSONB type)
-        joinsRequired = rule.joins_required;
-      } else if (typeof rule.joins_required === 'object') {
-        // It's an object, wrap it in array
-        joinsRequired = [rule.joins_required];
-      }
+    if (result.success) {
+      console.error(`   ✅ Query built: ${result.query.substring(0, 80)}...`);
+    } else {
+      console.error(`   ❌ Error: ${result.error}`);
     }
     
-    const parsed = {
-      field_name: rule.field_name,
-      source_table: rule.source_table,
-      source_column: rule.source_column,
-      joins_required: joinsRequired,
-      transformations: rule.transformations,
-      aggregation_hint: rule.aggregation_hint,
-      description: rule.description
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result) }]
     };
-
-    this.cache(cacheKey, parsed);
-    return parsed;
-  } catch (error) {
-    console.error(`❌ Error getting rules for ${fieldName}:`, error.message);
-    throw error;
-  }
   },
-
+  
   web_search: async (args) => {
     const { query, include_images = true, max_results = 5 } = args;
     console.error(`⚡ MCP: Web search for: "${query}"`);

@@ -203,6 +203,44 @@ export class DatabaseService {
     }
   }
 
+  // async getFieldRules(userId, fieldName) {
+  //   try {
+  //     const userSchema = await this.getUserSchema(userId);
+  //     const referral = userSchema.referral;
+
+  //     const cacheKey = `rules:${referral}:${fieldName}`;
+  //     const cached = this.getFromCache(cacheKey);
+  //     if (cached) return cached;
+
+  //     const result = await this.pool.query(`
+  //       SELECT *
+  //       FROM public.query_rules
+  //       WHERE referral = $1 AND field_name = $2
+  //     `, [referral, fieldName]);
+
+  //     if (result.rows.length === 0) {
+  //       throw new Error(`No rules found for field: ${fieldName}`);
+  //     }
+
+  //     const rule = result.rows[0];
+  //     const parsed = {
+  //       field_name: rule.field_name,
+  //       source_table: rule.source_table,
+  //       source_column: rule.source_column,
+  //       joins_required: rule.joins_required ? JSON.parse(rule.joins_required) : [],
+  //       transformations: rule.transformations,
+  //       aggregation_hint: rule.aggregation_hint,
+  //       description: rule.description
+  //     };
+
+  //     this.cache(cacheKey, parsed);
+  //     return parsed;
+  //   } catch (error) {
+  //     console.error(`❌ Error getting rules for ${fieldName}:`, error.message);
+  //     throw error;
+  //   }
+  // }
+
   async getFieldRules(userId, fieldName) {
     try {
       const userSchema = await this.getUserSchema(userId);
@@ -223,11 +261,32 @@ export class DatabaseService {
       }
 
       const rule = result.rows[0];
+      
+      // FIX: Handle joins_required properly
+      let joinsRequired = [];
+      if (rule.joins_required) {
+        if (typeof rule.joins_required === 'string') {
+          // It's a JSON string, parse it
+          try {
+            joinsRequired = JSON.parse(rule.joins_required);
+          } catch (e) {
+            console.error('Failed to parse joins_required:', e);
+            joinsRequired = [];
+          }
+        } else if (Array.isArray(rule.joins_required)) {
+          // It's already an array (PostgreSQL JSONB type)
+          joinsRequired = rule.joins_required;
+        } else if (typeof rule.joins_required === 'object') {
+          // It's an object, wrap it in array
+          joinsRequired = [rule.joins_required];
+        }
+      }
+      
       const parsed = {
         field_name: rule.field_name,
         source_table: rule.source_table,
         source_column: rule.source_column,
-        joins_required: rule.joins_required ? JSON.parse(rule.joins_required) : [],
+        joins_required: joinsRequired,
         transformations: rule.transformations,
         aggregation_hint: rule.aggregation_hint,
         description: rule.description
@@ -420,3 +479,4 @@ export class DatabaseService {
 }
 
 export default new DatabaseService();
+

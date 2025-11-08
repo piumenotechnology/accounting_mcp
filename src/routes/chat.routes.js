@@ -166,15 +166,15 @@ async function formatStructuredData(toolResults, user_location) {
             userQuestion: data.user_question || '',
             schema_name: data.schema_name
           });
-          
-          if (vizPayload.visual) {
-            result.visualization = {
-              // default_visual: vizPayload.visual,
-              // default_type: vizPayload.default,
-              variants: vizPayload.variants || [],
-              ai_reasoning: vizPayload.content
-            };
-          }
+          result.visualization = {variants : vizPayload}        
+          // if (vizPayload.visual) {
+          //   result.visualization = {
+          //     // default_visual: vizPayload.visual,
+          //     // default_type: vizPayload.default,
+          //     variants: vizPayload.variants || [],
+          //     // ai_reasoning: vizPayload.content
+          //   };
+          // }
         } catch (vizError) {
           console.error('❌ Visualization error:', vizError);
           result.visualization_error = vizError.message;
