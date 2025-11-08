@@ -14,6 +14,53 @@ class AIOrchestrator {
     this.dbService = DatabaseService;
   }
 
+  // async getDatabaseContext(user_id) {
+  //   try {
+  //     const schemaInfo = await this.dbService.getCompleteSchemaInfo(user_id);
+      
+  //     if (!schemaInfo || !schemaInfo.tables || schemaInfo.tables.length === 0) {
+  //       return null;
+  //     }
+      
+  //     // Format for our use
+  //     return {
+  //       schemas: [{
+  //         schema_name: schemaInfo.schema_name,
+  //         client_name: schemaInfo.client_name,
+  //         referral: schemaInfo.referral
+  //       }],
+  //       structures: {
+  //         [schemaInfo.schema_name]: schemaInfo.tables
+  //       },
+  //       available_fields: schemaInfo.available_fields || []
+  //     };
+      
+  //   } catch (error) {
+  //     console.error('❌ Failed to get database context:', error);
+  //     return null;
+  //   }
+  // }
+
+  // formatDatabaseWithSamples(dbContext, samples) {
+  //   let output = 'AVAILABLE TABLES WITH SAMPLE DATA:\n';
+    
+  //   for (const schema of dbContext.schemas) {
+  //     const structure = dbContext.structures[schema.schema_name];
+      
+  //     for (const table of structure) {
+  //       output += `\nTable: ${table.name}\n`;
+  //       output += `Columns: ${table.columns.map(c => `${c.name} (${c.type})`).join(', ')}\n`;
+        
+  //       const sampleData = samples[table.name] || [];
+  //       output += `Sample Data:\n${sampleData.length > 0 ? JSON.stringify(sampleData, null, 2) : 'No samples'}\n`;
+  //     }
+  //   }
+    
+  //   return output;
+  // }
+
+  // Add/update this in AIOrchestrator class:
+
   async getDatabaseContext(user_id) {
     try {
       const schemaInfo = await this.dbService.getCompleteSchemaInfo(user_id);
@@ -32,7 +79,7 @@ class AIOrchestrator {
         structures: {
           [schemaInfo.schema_name]: schemaInfo.tables
         },
-        available_fields: schemaInfo.available_fields || []
+        available_fields: schemaInfo.available_fields || [] // INCLUDES PRE-CONFIGURED FIELDS
       };
       
     } catch (error) {
@@ -88,66 +135,144 @@ class AIOrchestrator {
 
     // Only add database context if user has database access
     const dbContext = await this.getDatabaseContext(user_id);
-      if (dbContext && dbContext.schemas.length > 0) {
-        const samples = await this.dbService.getTableSamples(user_id, 3);    
-          systemContent += `
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          DATABASE ANALYTICS (AUTO-EXECUTION)
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // if (dbContext && dbContext.schemas.length > 0) {
+      //   const samples = await this.dbService.getTableSamples(user_id, 3);    
+      //     systemContent += `
+      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      //     DATABASE ANALYTICS (AUTO-EXECUTION)
+      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-          CLIENT: ${dbContext.schemas[0].client_name}
-          SCHEMA: ${dbContext.schemas[0].schema_name}
+      //     CLIENT: ${dbContext.schemas[0].client_name}
+      //     SCHEMA: ${dbContext.schemas[0].schema_name}
 
-          ${this.formatDatabaseWithSamples(dbContext, samples)}
+      //     ${this.formatDatabaseWithSamples(dbContext, samples)}
 
-          QUERY EXECUTION:
-          - Tool: execute_query(schema_name, query, params)
-          - Only SELECT allowed (read-only, safe)
-          - Execute immediately - no confirmation needed
-          - LIMIT auto-added by system (don't include in query)
+      //     QUERY EXECUTION:
+      //     - Tool: execute_query(schema_name, query, params)
+      //     - Only SELECT allowed (read-only, safe)
+      //     - Execute immediately - no confirmation needed
+      //     - LIMIT auto-added by system (don't include in query)
 
-          SMART QUERY BUILDING:
-          1. Use exact column names from tables above
-          2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
-          3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
-          4. Sorting: ORDER BY column DESC/ASC
-          5. Execute immediately, answer user
+      //     SMART QUERY BUILDING:
+      //     1. Use exact column names from tables above
+      //     2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
+      //     3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
+      //     4. Sorting: ORDER BY column DESC/ASC
+      //     5. Execute immediately, answer user
 
-          EXAMPLES:
+      //     EXAMPLES:
 
-          User: "How much did John pay?"
-          → execute_query(
-              schema_name: "${dbContext.schemas[0].schema_name}",
-              query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
-              params: ['%john%']
-            )
-          → Answer: "John paid $X total"
+      //     User: "How much did John pay?"
+      //     → execute_query(
+      //         schema_name: "${dbContext.schemas[0].schema_name}",
+      //         query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
+      //         params: ['%john%']
+      //       )
+      //     → Answer: "John paid $X total"
 
-          User: "Top 5 customers by revenue"
-          → execute_query(
-              schema_name: "${dbContext.schemas[0].schema_name}",
-              query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
-              params: []
-            )
-          → Answer with list
+      //     User: "Top 5 customers by revenue"
+      //     → execute_query(
+      //         schema_name: "${dbContext.schemas[0].schema_name}",
+      //         query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
+      //         params: []
+      //       )
+      //     → Answer with list
 
-          User: "Show transactions for vehicle HV71"
-          → execute_query(
-              schema_name: "${dbContext.schemas[0].schema_name}",
-              query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
-              params: ['%HV71%']
-            )
-          → Display results
+      //     User: "Show transactions for vehicle HV71"
+      //     → execute_query(
+      //         schema_name: "${dbContext.schemas[0].schema_name}",
+      //         query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
+      //         params: ['%HV71%']
+      //       )
+      //     → Display results
 
-          EFFICIENCY:
-          - One query should answer 90% of questions
-          - Sample data shows exact structure - use it
-          - Execute immediately when user asks about data
-          - Don't verify or double-check results
+      //     EFFICIENCY:
+      //     - One query should answer 90% of questions
+      //     - Sample data shows exact structure - use it
+      //     - Execute immediately when user asks about data
+      //     - Don't verify or double-check results
 
-          Execute queries autonomously using schema and samples above.
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-      }
+      //     Execute queries autonomously using schema and samples above.
+      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      // }
+    // Replace the existing database section with this enhanced version:
+
+    if (dbContext && dbContext.schemas.length > 0) {
+      const samples = await this.dbService.getTableSamples(user_id, 3);
+      
+      systemContent += `
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    DATABASE ANALYTICS (AUTO-EXECUTION)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    CLIENT: ${dbContext.schemas[0].client_name}
+    SCHEMA: ${dbContext.schemas[0].schema_name}
+
+    ${this.formatDatabaseWithSamples(dbContext, samples)}`;
+
+    // ADD PRE-CONFIGURED FIELDS SECTION
+    if (dbContext.available_fields && dbContext.available_fields.length > 0) {
+      systemContent += `
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        PRE-CONFIGURED FIELDS (Complex Queries)
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        These fields have pre-built queries with correct formulas and JOINs.
+        ⚠️ THESE ARE NOT COLUMNS - they are calculated fields!
+
+        ${dbContext.available_fields.map(field => `
+        - ${field.name}
+          Description: ${field.description}
+          Source: ${field.source_table}
+          
+          To use this field:
+          1. Call get_field_query(field_name: "${field.name}")
+          2. You'll receive the base query with correct formula
+          3. Add user's filters (WHERE, etc.)
+          4. Execute with execute_query
+          
+          ❌ DO NOT try to query a column called "${field.name}"
+          ✅ DO use get_field_query first!
+        `).join('\n')}
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    }
+
+    systemContent += `
+      AVAILABLE TOOLS:
+      1. get_field_query - Get pre-built query for fields listed above
+      2. execute_query - Execute SQL query on database
+
+      QUERY WORKFLOW:
+
+      For PRE-CONFIGURED FIELDS:
+      User: "What's the total income for vehicle HV71?"
+      Step 1: get_field_query(field_name: "total_income")
+              → Returns base query with correct formula
+      Step 2: Add filter: WHERE vehicle_rego = 'HV71'
+      Step 3: execute_query(schema_name, modified_query, params)
+              → Get results
+
+      For REGULAR TABLE QUERIES:
+      User: "Show me all payments from John"
+      Step 1: execute_query directly
+              → SELECT * FROM payment_xero WHERE contact_name ILIKE $1
+
+      EXECUTION:
+      - Only SELECT allowed (read-only, safe)
+      - Execute immediately - no confirmation needed
+      - LIMIT auto-added by system
+
+      SMART QUERY BUILDING:
+      1. Identify if field is pre-configured → use get_field_query
+      2. Use exact column names from tables above
+      3. Text filters: WHERE name ILIKE $1 → params: ['%john%']
+      4. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
+      5. Execute immediately, answer user
+
+      Execute queries autonomously using schema and samples above.
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  }
 
     // Google Tools Workflow
     systemContent += `
@@ -479,6 +604,7 @@ class AIOrchestrator {
           'search_contact',
           'send_email',
           'execute_query',
+          'get_field_query', //new 
         ];
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
