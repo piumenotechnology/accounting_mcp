@@ -52,7 +52,7 @@ export class DatabaseService {
 
       return result.rows[0];
     } catch (error) {
-      console.error(`❌ Error getting schema for user ${userId}:`, error.message);
+      // console.error(`❌ Error getting schema for user ${userId}:`, error.message);
       throw error;
     }
   }
@@ -115,7 +115,7 @@ export class DatabaseService {
       this.cache(cacheKey, result);
       return result;
     } catch (error) {
-      console.error('❌ Error fetching schema:', error.message);
+      // console.error('❌ Error fetching schema:', error.message);
       throw error;
     }
   }

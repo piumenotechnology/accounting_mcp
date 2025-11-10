@@ -14,51 +14,6 @@ class AIOrchestrator {
     this.dbService = DatabaseService;
   }
 
-  // async getDatabaseContext(user_id) {
-  //   try {
-  //     const schemaInfo = await this.dbService.getCompleteSchemaInfo(user_id);
-      
-  //     if (!schemaInfo || !schemaInfo.tables || schemaInfo.tables.length === 0) {
-  //       return null;
-  //     }
-      
-  //     // Format for our use
-  //     return {
-  //       schemas: [{
-  //         schema_name: schemaInfo.schema_name,
-  //         client_name: schemaInfo.client_name,
-  //         referral: schemaInfo.referral
-  //       }],
-  //       structures: {
-  //         [schemaInfo.schema_name]: schemaInfo.tables
-  //       },
-  //       available_fields: schemaInfo.available_fields || []
-  //     };
-      
-  //   } catch (error) {
-  //     console.error('❌ Failed to get database context:', error);
-  //     return null;
-  //   }
-  // }
-
-  // formatDatabaseWithSamples(dbContext, samples) {
-  //   let output = 'AVAILABLE TABLES WITH SAMPLE DATA:\n';
-    
-  //   for (const schema of dbContext.schemas) {
-  //     const structure = dbContext.structures[schema.schema_name];
-      
-  //     for (const table of structure) {
-  //       output += `\nTable: ${table.name}\n`;
-  //       output += `Columns: ${table.columns.map(c => `${c.name} (${c.type})`).join(', ')}\n`;
-        
-  //       const sampleData = samples[table.name] || [];
-  //       output += `Sample Data:\n${sampleData.length > 0 ? JSON.stringify(sampleData, null, 2) : 'No samples'}\n`;
-  //     }
-  //   }
-    
-  //   return output;
-  // }
-
   // Add/update this in AIOrchestrator class:
 
   async getDatabaseContext(user_id) {
@@ -83,7 +38,7 @@ class AIOrchestrator {
       };
       
     } catch (error) {
-      console.error('❌ Failed to get database context:', error);
+      // console.error('❌ Failed to get database context:');
       return null;
     }
   }

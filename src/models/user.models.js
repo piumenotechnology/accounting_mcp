@@ -67,9 +67,9 @@ export const authModels = {
                         u.name,
                         COUNT(*) AS total_chat,
                         MAX(m.created_at) AS last_message_at
-                        FROM messages m
-                        JOIN conversations c ON c.id = m.conversation_id
-                        JOIN users u ON u.id = c.user_id
+                        FROM public.messages m
+                        JOIN public.conversations c ON c.id = m.conversation_id
+                        JOIN public.users u ON u.id = c.user_id
                         WHERE m."role" = 'user'
                         GROUP BY u.name
                         ORDER BY last_message_at DESC`
