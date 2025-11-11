@@ -373,10 +373,10 @@ Return ONLY valid JSON.`;
     const content = response.choices[0].message.content;
     const plan = JSON.parse(content);
 
-    console.log('✅ Dynamic Visualization Plan:');
-    console.log(`   Reasoning: ${plan.reasoning}`);
-    console.log(`   Default: ${plan.default}`);
-    console.log(`   Charts: ${plan.variants?.map(v => `${v.id} (${v.type})`).join(', ')}`);
+    // console.log('✅ Dynamic Visualization Plan:');
+    // console.log(`   Reasoning: ${plan.reasoning}`);
+    // console.log(`   Default: ${plan.default}`);
+    // console.log(`   Charts: ${plan.variants?.map(v => `${v.id} (${v.type})`).join(', ')}`);
 
     return plan;
   }

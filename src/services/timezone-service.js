@@ -19,7 +19,7 @@ export function getTimezoneFromCoordinates(lat, lng) {
     
     if (timezones && timezones.length > 0) {
       const timezone = timezones[0]; // First result is most accurate
-      console.log(`✅ Timezone detected: ${timezone} for coordinates (${lat}, ${lng})`);
+      // console.log(`✅ Timezone detected: ${timezone} for coordinates (${lat}, ${lng})`);
       return timezone;
     }
 

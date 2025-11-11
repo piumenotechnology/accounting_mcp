@@ -354,31 +354,6 @@ async function formatStructuredData(toolResults, user_location) {
   return result;
 }
 
-// async function summarizeText(text, length = "short", tone = "casual") {
-//   if (!text || !text.trim()) throw new Error("No text provided for summarization.");
-
-//   const systemPrompt = `
-// You are a precise summarizer. Summarize the text accurately and clearly.
-// Keep all key facts, remove fluff or repetition.
-// Target length: ${length}. Desired tone: ${tone}.
-// No marketing filler, no lists unless necessary.
-//   `.trim();
-
-//   const response = await client.chat.completions.create({
-//     model: "gpt-4.1-mini",
-//     temperature: 0.2,
-//     max_tokens: 400,
-//     messages: [
-//       { role: "system", content: systemPrompt },
-//       { role: "user", content: text }
-//     ]
-//   });
-
-//   return response.choices[0].message.content.trim();
-// }
-
-// GET /api/chat/conversations/:user_id - Get all user conversations
-
 // util: strip markdown, collapse whitespace, fix spacing
 function cleanPlainText(s) {
   if (!s) return "";
@@ -473,7 +448,7 @@ async function summarizeText(
   }
 }
 
-
+// GET /api/chat/conversations/:user_id - Get all user conversations
 router.get('/conversations/:user_id', async (req, res) => {
   try {
     const { user_id } = req.params;

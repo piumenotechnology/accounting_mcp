@@ -90,67 +90,6 @@ class AIOrchestrator {
 
     // Only add database context if user has database access
     const dbContext = await this.getDatabaseContext(user_id);
-      // if (dbContext && dbContext.schemas.length > 0) {
-      //   const samples = await this.dbService.getTableSamples(user_id, 3);    
-      //     systemContent += `
-      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      //     DATABASE ANALYTICS (AUTO-EXECUTION)
-      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-      //     CLIENT: ${dbContext.schemas[0].client_name}
-      //     SCHEMA: ${dbContext.schemas[0].schema_name}
-
-      //     ${this.formatDatabaseWithSamples(dbContext, samples)}
-
-      //     QUERY EXECUTION:
-      //     - Tool: execute_query(schema_name, query, params)
-      //     - Only SELECT allowed (read-only, safe)
-      //     - Execute immediately - no confirmation needed
-      //     - LIMIT auto-added by system (don't include in query)
-
-      //     SMART QUERY BUILDING:
-      //     1. Use exact column names from tables above
-      //     2. Text filters: WHERE column_name ILIKE $1 → params: ['%search%']
-      //     3. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
-      //     4. Sorting: ORDER BY column DESC/ASC
-      //     5. Execute immediately, answer user
-
-      //     EXAMPLES:
-
-      //     User: "How much did John pay?"
-      //     → execute_query(
-      //         schema_name: "${dbContext.schemas[0].schema_name}",
-      //         query: "SELECT SUM(total) FROM payment_xero WHERE contact_name ILIKE $1",
-      //         params: ['%john%']
-      //       )
-      //     → Answer: "John paid $X total"
-
-      //     User: "Top 5 customers by revenue"
-      //     → execute_query(
-      //         schema_name: "${dbContext.schemas[0].schema_name}",
-      //         query: "SELECT contact_name, SUM(total) as revenue FROM payment_xero GROUP BY contact_name ORDER BY revenue DESC",
-      //         params: []
-      //       )
-      //     → Answer with list
-
-      //     User: "Show transactions for vehicle HV71"
-      //     → execute_query(
-      //         schema_name: "${dbContext.schemas[0].schema_name}",
-      //         query: "SELECT * FROM bank_transaction WHERE vehicle_rego ILIKE $1",
-      //         params: ['%HV71%']
-      //       )
-      //     → Display results
-
-      //     EFFICIENCY:
-      //     - One query should answer 90% of questions
-      //     - Sample data shows exact structure - use it
-      //     - Execute immediately when user asks about data
-      //     - Don't verify or double-check results
-
-      //     Execute queries autonomously using schema and samples above.
-      //     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
-      // }
-    // Replace the existing database section with this enhanced version:
 
     if (dbContext && dbContext.schemas.length > 0) {
       const samples = await this.dbService.getTableSamples(user_id, 3);
@@ -421,17 +360,17 @@ class AIOrchestrator {
     }
     
     console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
-    console.log(`   User: ${user_id}`);
-    console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
+    // console.log(`   User: ${user_id}`);
+    // console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
     if (user_location) {
-      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
+      // console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
     }
     
     // Step 2: Get MCP tools - ALL OF THEM
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
     
-    console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
+    // console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
     
     // Step 3: Convert MCP tools to OpenAI format - PASS ALL TOOLS
     const tools = mcpTools.tools.map(tool => ({
@@ -488,7 +427,7 @@ class AIOrchestrator {
     
     if (conversationHistory.length > 0) {
       messages = [systemMessage, ...conversationHistory];
-      console.log(`📚 Using ${conversationHistory.length} messages from history`);
+      // console.log(`📚 Using ${conversationHistory.length} messages from history`);
     } else {
       messages = [systemMessage, { role: 'user', content: message }];
       console.log('✨ Starting new conversation');

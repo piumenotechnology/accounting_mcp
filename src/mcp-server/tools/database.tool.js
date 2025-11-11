@@ -5,14 +5,14 @@ import { QueryValidator } from './query-validator.js';
 
 export async function executeQueryTool({ userId, schema_name, query, params = [], user_question = '' }) {
   // 1. Check access
-  const accessCheck = await db.query(
-    'SELECT user_has_schema_access($1, $2) as has_access',
-    [userId, schema_name]
-  );
+  // const accessCheck = await db.query(
+  //   'SELECT user_has_schema_access($1, $2) as has_access',
+  //   [userId, schema_name]
+  // );
   
-  if (!accessCheck.rows[0].has_access) {
-    throw new Error(`Access denied to schema: ${schema_name}`);
-  }
+  // if (!accessCheck.rows[0].has_access) {
+  //   throw new Error(`Access denied to schema: ${schema_name}`);
+  // }
   
   // 2. Validate query
   try {

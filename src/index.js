@@ -22,5 +22,5 @@ app.use('/api/v2', apiRouter);
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
-  console.log(`📡 API endpoint: http://localhost:${PORT}/api/chat`);
+  // console.log(`📡 API endpoint: http://localhost:${PORT}/api/chat`);
 });

@@ -66,7 +66,7 @@ export class DatabaseService {
       const cacheKey = `schema:${userId}:${schemaName}`;
       const cached = this.getFromCache(cacheKey);
       if (cached) {
-        console.log(`📦 Using cached schema for ${schemaName}`);
+        // console.log(`📦 Using cached schema for ${schemaName}`);
         return cached;
       }
 
@@ -128,7 +128,7 @@ export class DatabaseService {
       const cacheKey = `samples:${userId}:${schemaName}`;
       const cached = this.getFromCache(cacheKey);
       if (cached) {
-        console.log(`📦 Using cached samples for ${schemaName}`);
+        // console.log(`📦 Using cached samples for ${schemaName}`);
         return cached;
       }
 
