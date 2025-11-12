@@ -137,14 +137,49 @@ class AIVisualizer {
       const matchesPattern = datePatterns.some(p => p.test(str));
       
       if (matchesPattern) {
-        const d = new Date(val);
-        if (!isNaN(d.getTime()) && d.getFullYear() > 1900 && d.getFullYear() < 2100) {
+        const d = this.parseDate(val);
+        if (d && d.getFullYear() > 1900 && d.getFullYear() < 2100) {
           dateCount++;
         }
       }
     }
 
     return dateCount / samples.length;
+  }
+
+  /**
+   * Parse date using UTC and handle timezone-shifted dates
+   * Backend converts: 2025-01-01 00:00:00+0800 → 2024-12-31T16:00:00.000Z
+   * We want to show: 2025-01-01 (the original date in SQL)
+   */
+  parseDate(dateString) {
+    if (!dateString) return null;
+    
+    const str = String(dateString);
+    
+    // Extract YYYY-MM-DD part
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [_, year, month, day] = match;
+      
+      // Check if this is a UTC timestamp that's been timezone-shifted
+      // Pattern: ends with 16:00:00.000Z (midnight in +8 timezone)
+      const isShiftedFromPlus8 = str.match(/T16:00:00\.000Z$/);
+      
+      if (isShiftedFromPlus8) {
+        // Add 8 hours back to get original date
+        const d = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 16));
+        // Shift forward 8 hours
+        d.setUTCHours(d.getUTCHours() + 8);
+        return d;
+      }
+      
+      // Regular date parsing in UTC
+      const d = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    
+    return null;
   }
 
   /**
@@ -373,10 +408,10 @@ Return ONLY valid JSON.`;
     const content = response.choices[0].message.content;
     const plan = JSON.parse(content);
 
-    // console.log('✅ Dynamic Visualization Plan:');
-    // console.log(`   Reasoning: ${plan.reasoning}`);
-    // console.log(`   Default: ${plan.default}`);
-    // console.log(`   Charts: ${plan.variants?.map(v => `${v.id} (${v.type})`).join(', ')}`);
+    console.log('✅ Dynamic Visualization Plan:');
+    console.log(`   Reasoning: ${plan.reasoning}`);
+    console.log(`   Default: ${plan.default}`);
+    console.log(`   Charts: ${plan.variants?.map(v => `${v.id} (${v.type})`).join(', ')}`);
 
     return plan;
   }
@@ -467,9 +502,11 @@ Return ONLY valid JSON.`;
         const bVal = b[sort_by];
         
         if (sortColType === 'date') {
-          const aDate = new Date(aVal);
-          const bDate = new Date(bVal);
-          return sort_order === 'asc' ? aDate - bDate : bDate - aDate;
+          const aDate = this.parseDate(aVal);
+          const bDate = this.parseDate(bVal);
+          if (aDate && bDate) {
+            return sort_order === 'asc' ? aDate - bDate : bDate - aDate;
+          }
         }
         
         if (sortColType === 'numeric' || sortColType === 'currency') {
@@ -732,13 +769,25 @@ Return ONLY valid JSON.`;
     if (value === null || value === undefined) return '';
     
     if (type === 'date') {
-      const date = new Date(value);
-      if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric' 
-        });
+      const date = this.parseDate(value);
+      if (date) {
+        // Check if this looks like monthly data (first day of month)
+        const isFirstOfMonth = date.getUTCDate() === 1;
+        
+        if (isFirstOfMonth) {
+          // Format as "Jan 2025" for monthly data
+          return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short',
+            timeZone: 'UTC'
+          });
+        }
+        
+        // Format as YYYY-MM-DD using UTC
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       }
     }
 
@@ -773,15 +822,36 @@ Return ONLY valid JSON.`;
   formatValueByType(value, columnName) {
     if (value === null || value === undefined) return '';
     
-    // Try date
-    const date = new Date(value);
-    if (!isNaN(date.getTime()) && typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return date.toISOString().split('T')[0];
+    const str = String(value);
+    
+    // Check if it's a date
+    const dateMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      // Use the same parseDate logic to handle timezone shifts
+      const date = this.parseDate(value);
+      if (date) {
+        const isFirstOfMonth = date.getUTCDate() === 1;
+        
+        if (isFirstOfMonth) {
+          // Format as "Jan 2025" for monthly data
+          return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short',
+            timeZone: 'UTC'
+          });
+        }
+        
+        // Format as YYYY-MM-DD using UTC
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
     }
 
     // Try currency
-    if (String(value).includes('$')) {
-      return String(value);
+    if (str.includes('$')) {
+      return str;
     }
 
     // Try number
@@ -794,7 +864,7 @@ Return ONLY valid JSON.`;
       }).format(value);
     }
 
-    return String(value);
+    return str;
   }
 
   /**
