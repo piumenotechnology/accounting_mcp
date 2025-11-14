@@ -62,23 +62,27 @@ export const authModels = {
             throw new Error('Database query failed');
         }
     },
-    getActiveUser: async () => {
-       const query = `SELECT 
-                        u.name,
-                        COUNT(*) AS total_chat,
-                        MAX(m.created_at) AS last_message_at
-                        FROM public.messages m
-                        JOIN public.conversations c ON c.id = m.conversation_id
-                        JOIN public.users u ON u.id = c.user_id
-                        WHERE m."role" = 'user'
-                        GROUP BY u.name
-                        ORDER BY last_message_at DESC`
+    getActiveUser: async (startDate, endDate) => {
+        const query = `
+            SELECT 
+            u.name,
+            COUNT(*) AS total_chat,
+            MAX(m.created_at) AS last_message_at
+            FROM public.messages m
+            JOIN public.conversations c ON c.id = m.conversation_id
+            JOIN public.users u ON u.id = c.user_id
+            WHERE m."role" = 'user'
+            AND m.created_at BETWEEN $1 AND $2
+            GROUP BY u.name
+            ORDER BY last_message_at DESC
+        `;
         try {
-            const result = await pool.query(query)
-            return result.rows
+            const result = await pool.query(query, [startDate, endDate]);
+            return result.rows;
         } catch (error) {
-            console.error('❌ Error in getActiveUser:', error.message)
+            console.error('❌ Error in getActiveUser:', error.message);
             throw new Error('Database query failed');
-        } 
+        }
     }
+
 }

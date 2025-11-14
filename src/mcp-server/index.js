@@ -308,6 +308,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Tool handlers
 const toolHandlers = {
+  //Check Google Connection
   check_google_connection: async (args) => {
     console.error(`⚡ MCP: Checking Google connection for user: ${args.user_id}`);
     const result = await checkGoogleConnectionTool({ userId: args.user_id });
@@ -316,6 +317,7 @@ const toolHandlers = {
     };
   },
 
+  //Search Contact Tools
   search_contact: async (args) => {
     const { name, user_id } = args;
     console.error(`⚡ MCP: Searching contact "${name}" for user: ${user_id}`);
@@ -330,6 +332,7 @@ const toolHandlers = {
     };
   },
 
+  //Email Tools
   send_email: async (args) => {
     const { user_id, to, subject, body, cc, bcc, html, replyTo } = args;
     console.error(`⚡ MCP: Sending email for user: ${user_id}`);
@@ -352,6 +355,7 @@ const toolHandlers = {
     };
   },
 
+  //Calendar Tools
   create_calendar_event: async (args) => {
     console.error(`⚡ MCP: Creating calendar event for user: ${args.user_id}`);
     const { user_id, user_location, ...eventData } = args;
@@ -400,6 +404,7 @@ const toolHandlers = {
     };
   },
 
+  //Database Tools
   execute_query: async (args) => {
     const { user_id, schema_name, query, params = [] } = args;
     console.error(`⚡ MCP: Executing query on ${schema_name} for user: ${user_id}`);
@@ -439,6 +444,7 @@ const toolHandlers = {
     };
   },
   
+  //Web Tools
   web_search: async (args) => {
     const { query, include_images = true, max_results = 5 } = args;
     console.error(`⚡ MCP: Web search for: "${query}"`);
@@ -472,6 +478,7 @@ const toolHandlers = {
     };
   },
   
+  //Google Maps Tools
   ...googleMapsHandlers
 };
 
