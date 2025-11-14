@@ -66,6 +66,7 @@ export const authModels = {
         const query = `
             SELECT 
             u.name,
+            u.email,
             COUNT(*) AS total_chat,
             MAX(m.created_at) AS last_message_at
             FROM public.messages m
@@ -73,7 +74,7 @@ export const authModels = {
             JOIN public.users u ON u.id = c.user_id
             WHERE m."role" = 'user'
             AND m.created_at BETWEEN $1 AND $2
-            GROUP BY u.name
+            GROUP BY u.name, u.email
             ORDER BY total_chat DESC
         `;
         try {
