@@ -92,18 +92,18 @@ router.post('/', async (req, res) => {
     );
 
     // let summarized = await summarizeText(response.message, "medium", "crisp");
-    let summarized = await summarizeText(
-                    response.message, 
-                    message,   //user question
-                    "medium", 
-                    "crisp"
-                  );
+    // let summarized = await summarizeText(
+    //                 response.message, 
+    //                 message,   //user question
+    //                 "medium", 
+    //                 "crisp"
+    //               );
 
     // console.log(response.toolResults);
 
     const responseData = {
       conversation_id: conversationId,
-      message: summarized,
+      // message: summarized,
       message_raw: response.message,
       toolsCalled: response.toolsCalled,
       model: response.model,
@@ -124,8 +124,8 @@ router.post('/', async (req, res) => {
       await chatModels.saveMessage(
         conversationId,
         'assistant',
-        // response.message,
-        summarized,
+        response.message,
+        // summarized,
         response.model,
         response.usage?.total_tokens || 0,
         structuredData
@@ -135,8 +135,8 @@ router.post('/', async (req, res) => {
       await chatModels.saveMessage(
         conversationId,
         'assistant',
-        // response.message,
-        summarized,
+        response.message,
+        // summarized,
         response.model,
         response.usage?.total_tokens || 0
       );
