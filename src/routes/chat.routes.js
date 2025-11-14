@@ -91,14 +91,20 @@ router.post('/', async (req, res) => {
       ['execute_query'].includes(tool)
     );
 
-    let summariz = await summarizeText(response.message, "medium", "crisp");
+    // let summarized = await summarizeText(response.message, "medium", "crisp");
+    let summarized = await summarizeText(
+                    response.message, 
+                    message,   //user question
+                    "medium", 
+                    "crisp"
+                  );
 
     // console.log(response.toolResults);
 
     const responseData = {
       conversation_id: conversationId,
-      message: summariz,
-      // message: response.message,
+      message: summarized,
+      message_raw: response.message,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
@@ -119,7 +125,7 @@ router.post('/', async (req, res) => {
         conversationId,
         'assistant',
         // response.message,
-        summariz,
+        summarized,
         response.model,
         response.usage?.total_tokens || 0,
         structuredData
@@ -130,7 +136,7 @@ router.post('/', async (req, res) => {
         conversationId,
         'assistant',
         // response.message,
-        summariz,
+        summarized,
         response.model,
         response.usage?.total_tokens || 0
       );
@@ -373,8 +379,90 @@ function cleanPlainText(s) {
     .trim();
 }
 
+// async function summarizeText(
+//   text,
+//   length = "short",
+//   tone = "casual"
+// ) {
+//   if (!text || !text.trim()) {
+//     throw new Error("No text provided for summarization.");
+//   }
+
+//   const systemPrompt = [
+//     "You are a precise summarizer.",
+//     "Summarize the text accurately and clearly.",
+//     `Target length: ${length}. Desired tone: ${tone}.`,
+//     "Return JSON only with this schema:",
+//     "{ summary: string }",
+//     "No markdown, no asterisks, no headings, no lists, no links, no emojis.",
+//     "One compact paragraph, readable, plain punctuation only."
+//   ].join(" ");
+
+//   try {
+//     const response = await client.chat.completions.create({
+//       model: "gpt-4.1-mini",
+//       temperature: 0,
+//       max_tokens: 300,
+//       // ask for structured output
+//       response_format: {
+//         type: "json_schema",
+//         json_schema: {
+//           name: "summary_schema",
+//           schema: {
+//             type: "object",
+//             properties: {
+//               summary: { type: "string" }
+//             },
+//             required: ["summary"],
+//             additionalProperties: false
+//           },
+//           strict: true
+//         }
+//       },
+//       messages: [
+//         { role: "system", content: systemPrompt },
+//         { role: "user", content: text }
+//       ]
+//     });
+
+//     // primary path, parse JSON and sanitize just in case
+//     const raw = response.choices?.[0]?.message?.content ?? "";
+//     let obj;
+//     try {
+//       obj = JSON.parse(raw);
+//     } catch {
+//       // some SDKs already return parsed JSON in message.content[0].text,
+//       // if so, fall through to cleaner below
+//       obj = { summary: raw };
+//     }
+//     return cleanPlainText(obj.summary);
+//   } catch (err) {
+//     // fallback: run a plain generation then sanitize
+//     const fallback = await client.chat.completions.create({
+//       model: "gpt-4.1-mini",
+//       temperature: 0,
+//       max_tokens: 300,
+//       messages: [
+//         {
+//           role: "system",
+//           content:
+//             "Summarize clearly. Plain text only, no markdown, no lists, one short paragraph."
+//         },
+//         { role: "user", content: text }
+//       ]
+//     });
+//     const textOut = fallback.choices?.[0]?.message?.content ?? "";
+//     return cleanPlainText(textOut);
+//   }
+// }
+
+// GET /api/chat/conversations/:user_id - Get all user conversations
+/**
+ * Intelligently summarize or format based on user intent
+ */
 async function summarizeText(
   text,
+  userQuestion = "",
   length = "short",
   tone = "casual"
 ) {
@@ -382,22 +470,43 @@ async function summarizeText(
     throw new Error("No text provided for summarization.");
   }
 
-  const systemPrompt = [
-    "You are a precise summarizer.",
-    "Summarize the text accurately and clearly.",
-    `Target length: ${length}. Desired tone: ${tone}.`,
-    "Return JSON only with this schema:",
-    "{ summary: string }",
-    "No markdown, no asterisks, no headings, no lists, no links, no emojis.",
-    "One compact paragraph, readable, plain punctuation only."
-  ].join(" ");
+  // Detect if user wants a list/enumeration
+  const wantsList = /\b(list|enumerate|show me|give me|name|top \d+|\d+ (latest|recent|best|top))/i.test(userQuestion);
+  
+  // Detect if asking for specific count
+  const countMatch = userQuestion.match(/\b(\d+)\b/);
+  const requestedCount = countMatch ? parseInt(countMatch[1]) : null;
+
+  let systemPrompt;
+
+  if (wantsList) {
+    systemPrompt = [
+      "You are a precise formatter.",
+      "The user asked for a list. Preserve the list format.",
+      requestedCount ? `Return exactly ${requestedCount} items.` : "Return all items from the source.",
+      "Format as clean numbered list:",
+      "1. Item one - brief description",
+      "2. Item two - brief description",
+      "Return JSON: { summary: string }",
+      "The summary field should contain the numbered list with line breaks (\\n).",
+      `Tone: ${tone}. Keep descriptions ${length}.`
+    ].join(" ");
+  } else {
+    systemPrompt = [
+      "You are a precise summarizer.",
+      "Summarize the text accurately and clearly into a flowing paragraph.",
+      `Target length: ${length}. Desired tone: ${tone}.`,
+      "Return JSON only: { summary: string }",
+      "No markdown formatting, no asterisks, no headings.",
+      "One compact paragraph with plain punctuation only."
+    ].join(" ");
+  }
 
   try {
     const response = await client.chat.completions.create({
       model: "gpt-4.1-mini",
       temperature: 0,
-      max_tokens: 300,
-      // ask for structured output
+      max_tokens: 500,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -415,42 +524,35 @@ async function summarizeText(
       },
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: text }
+        { 
+          role: "user", 
+          content: `Original question: "${userQuestion}"\n\nText to process:\n${text}` 
+        }
       ]
     });
 
-    // primary path, parse JSON and sanitize just in case
     const raw = response.choices?.[0]?.message?.content ?? "";
     let obj;
     try {
       obj = JSON.parse(raw);
     } catch {
-      // some SDKs already return parsed JSON in message.content[0].text,
-      // if so, fall through to cleaner below
       obj = { summary: raw };
     }
-    return cleanPlainText(obj.summary);
+
+    // For lists, preserve line breaks; for prose, clean them
+    if (wantsList) {
+      return obj.summary; // Keep \n for list items
+    } else {
+      return cleanPlainText(obj.summary);
+    }
+    
   } catch (err) {
-    // fallback: run a plain generation then sanitize
-    const fallback = await client.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0,
-      max_tokens: 300,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Summarize clearly. Plain text only, no markdown, no lists, one short paragraph."
-        },
-        { role: "user", content: text }
-      ]
-    });
-    const textOut = fallback.choices?.[0]?.message?.content ?? "";
-    return cleanPlainText(textOut);
+    console.error("Summarization error:", err);
+    // Fallback
+    return wantsList ? text : cleanPlainText(text);
   }
 }
 
-// GET /api/chat/conversations/:user_id - Get all user conversations
 router.get('/conversations/:user_id', async (req, res) => {
   try {
     const { user_id } = req.params;
