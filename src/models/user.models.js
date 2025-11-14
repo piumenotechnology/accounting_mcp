@@ -74,7 +74,7 @@ export const authModels = {
             WHERE m."role" = 'user'
             AND m.created_at BETWEEN $1 AND $2
             GROUP BY u.name
-            ORDER BY last_message_at DESC
+            ORDER BY total_chat DESC
         `;
         try {
             const result = await pool.query(query, [startDate, endDate]);
