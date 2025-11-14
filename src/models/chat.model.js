@@ -3,13 +3,13 @@ import { pool } from '../config/db.js';
 export const chatModels = {
   
   // Create new conversation
-  createConversation: async (user_id, model, title = 'New Chat') => {
+  createConversation: async (user_id, title = 'New Chat') => {
     const query = `
-      INSERT INTO conversations (user_id, model, title)
-      VALUES ($1, $2, $3)
+      INSERT INTO conversations (user_id, title)
+      VALUES ($1, $2)
       RETURNING *`;
     try {
-      const result = await pool.query(query, [user_id, model, title]);
+      const result = await pool.query(query, [user_id, title]);
       return result.rows[0];
     } catch (error) {
       console.error('❌ Error in createConversation:', error.message);

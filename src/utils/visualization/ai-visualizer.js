@@ -11,6 +11,70 @@ class AIVisualizer {
   }
 
   /**
+   * Check if column should be skipped (ID columns)
+   */
+  shouldSkipColumn(columnName) {
+    if (!columnName) return true;
+    
+    const name = String(columnName).toLowerCase();
+    
+    // Skip columns that are IDs
+    return name === 'id' || 
+           name.startsWith('id_') || 
+           name.endsWith('_id') ||
+           name.includes('_id_');
+  }
+
+  /**
+   * Check if a date column has duplicate values (which would cause stacking)
+   */
+  hasDuplicateDates(rows, dateColumn) {
+    const dates = rows.map(r => r[dateColumn]).filter(d => d !== null && d !== undefined);
+    const uniqueDates = new Set(dates);
+    return dates.length > uniqueDates.size;
+  }
+
+  /**
+   * Find the best alternative column to use instead of a duplicate date column
+   */
+  findAlternativeXColumn(rows, dateColumn, columnAnalysis) {
+    // Get all non-ID, non-date columns sorted by priority
+    const alternatives = Object.entries(columnAnalysis)
+      .filter(([col, info]) => 
+        col !== dateColumn && 
+        !info.skipped && 
+        info.type !== 'date' &&
+        info.type !== 'identifier' &&
+        info.priority > 0
+      )
+      .sort((a, b) => b[1].priority - a[1].priority);
+
+    // Prefer category columns with reasonable unique counts
+    const categoryColumn = alternatives.find(([col, info]) => 
+      info.type === 'category' && 
+      info.uniqueCount >= 2 && 
+      info.uniqueCount <= 50
+    );
+
+    if (categoryColumn) {
+      return categoryColumn[0];
+    }
+
+    // If no good category, return the first non-numeric column
+    const nonNumeric = alternatives.find(([col, info]) => 
+      info.type !== 'numeric' && 
+      info.type !== 'currency'
+    );
+
+    if (nonNumeric) {
+      return nonNumeric[0];
+    }
+
+    // Last resort: use row index
+    return null;
+  }
+
+  /**
    * Main method: Analyze SQL results and generate visualization config
    */
   async generateVisualization(data) {
@@ -65,6 +129,18 @@ class AIVisualizer {
     const sampleSize = Math.min(15, rows.length);
 
     for (const col of columns) {
+      // Skip ID columns
+      if (this.shouldSkipColumn(col)) {
+        analysis[col] = { 
+          type: 'identifier', 
+          priority: 0,
+          uniqueCount: 0,
+          sampleValues: [],
+          skipped: true
+        };
+        continue;
+      }
+
       const samples = rows.slice(0, sampleSize)
         .map(r => r[col])
         .filter(v => v !== null && v !== undefined && v !== '');
@@ -312,8 +388,9 @@ class AIVisualizer {
     const sampleRows = rows.slice(0, 3);
     const rowCount = rows.length;
 
-    // Build dynamic column insights
+    // Build dynamic column insights (exclude skipped columns)
     const columnInsights = Object.entries(columnAnalysis)
+      .filter(([col, info]) => !info.skipped)
       .sort((a, b) => b[1].priority - a[1].priority)
       .map(([col, info]) => {
         return {
@@ -353,6 +430,7 @@ Analyze the ACTUAL columns present and create:
 - Many categories (>10) → Use top_n: 10
 - Numeric with high variance → Good for Y axis
 - Dates → Always sort chronologically
+- Note: If a date column has duplicate values, the system will automatically use an alternative x-axis to prevent stacking
 
 **Response Format (JSON):**
 {
@@ -383,6 +461,7 @@ CRITICAL:
 - Prioritize columns with high priority scores
 - Create descriptive titles that explain what the chart shows
 - Avoid using identifier columns (type: "identifier") for chart axes
+- DO NOT use columns with 'id', 'id_', or '_id' in their names
 
 Return ONLY valid JSON.`;
 
@@ -425,18 +504,18 @@ Return ONLY valid JSON.`;
     for (const variantPlan of plan.variants || []) {
       let visual = null;
 
-      // Validate columns exist in data
-      const availableColumns = Object.keys(rows[0]);
+      // Validate columns exist in data and are not skipped
+      const availableColumns = Object.keys(rows[0]).filter(col => !this.shouldSkipColumn(col));
       const xColumn = variantPlan.x_column;
       const yColumn = variantPlan.y_column;
       const categoryColumn = variantPlan.category_column;
       const valueColumn = variantPlan.value_column;
 
-      // Skip if required columns don't exist
-      if (xColumn && !availableColumns.includes(xColumn)) continue;
-      if (yColumn && !availableColumns.includes(yColumn)) continue;
-      if (categoryColumn && !availableColumns.includes(categoryColumn)) continue;
-      if (valueColumn && !availableColumns.includes(valueColumn)) continue;
+      // Skip if required columns don't exist or are ID columns
+      if (xColumn && (!availableColumns.includes(xColumn) || this.shouldSkipColumn(xColumn))) continue;
+      if (yColumn && (!availableColumns.includes(yColumn) || this.shouldSkipColumn(yColumn))) continue;
+      if (categoryColumn && (!availableColumns.includes(categoryColumn) || this.shouldSkipColumn(categoryColumn))) continue;
+      if (valueColumn && (!availableColumns.includes(valueColumn) || this.shouldSkipColumn(valueColumn))) continue;
 
       switch (variantPlan.type) {
         case 'table':
@@ -469,10 +548,11 @@ Return ONLY valid JSON.`;
   }
 
   /**
-   * Build dynamic table from actual columns
+   * Build dynamic table from actual columns (excluding ID columns)
    */
   buildDynamicTable(rows, plan, availableColumns) {
-    const columns = availableColumns;
+    // Filter out ID columns
+    const columns = availableColumns.filter(col => !this.shouldSkipColumn(col));
     const labels = columns.map(col => this.generateLabel(col));
     
     const data = rows.map(row =>
@@ -490,7 +570,31 @@ Return ONLY valid JSON.`;
    * Build line chart with dynamic column detection
    */
   buildLineChart(rows, plan, columnAnalysis) {
-    const { x_column, y_column, sort_by, sort_order = 'asc' } = plan;
+    let { x_column, y_column, sort_by, sort_order = 'asc' } = plan;
+
+    // Check if x_column is a date with duplicates
+    const xColumnType = columnAnalysis[x_column]?.type;
+    let useAlternativeX = false;
+    let originalXColumn = x_column;
+
+    if (xColumnType === 'date' && this.hasDuplicateDates(rows, x_column)) {
+      console.log(`⚠️  Detected duplicate dates in ${x_column}, finding alternative x-axis...`);
+      
+      const alternative = this.findAlternativeXColumn(rows, x_column, columnAnalysis);
+      
+      if (alternative) {
+        console.log(`✓ Using ${alternative} as x-axis instead`);
+        x_column = alternative;
+        useAlternativeX = true;
+      } else {
+        // Use row numbers as fallback
+        console.log(`✓ Using row numbers as x-axis instead`);
+        rows = rows.map((row, index) => ({ ...row, _row_number: index + 1 }));
+        x_column = '_row_number';
+        columnAnalysis['_row_number'] = { type: 'numeric', priority: 1 };
+        useAlternativeX = true;
+      }
+    }
 
     // Sort data based on column type
     let sorted = [...rows];
@@ -535,7 +639,10 @@ Return ONLY valid JSON.`;
         x: this.generateLabel(x_column),
         y: this.generateLabel(y_column)
       },
-      extra: { formatted }
+      extra: { 
+        formatted,
+        note: useAlternativeX ? `Original date column (${originalXColumn}) had duplicates` : undefined
+      }
     };
   }
 
@@ -554,7 +661,7 @@ Return ONLY valid JSON.`;
    * Build bar chart with dynamic aggregation
    */
   buildBarChart(rows, plan, columnAnalysis) {
-    const { 
+    let { 
       x_column, 
       y_column, 
       aggregation = 'sum', 
@@ -562,6 +669,54 @@ Return ONLY valid JSON.`;
       sort_order = 'desc',
       top_n 
     } = plan;
+
+    // Check if x_column is a date with duplicates
+    const xColumnType = columnAnalysis[x_column]?.type;
+    let useAlternativeX = false;
+    let originalXColumn = x_column;
+    let skipAggregation = false;
+
+    if (xColumnType === 'date' && this.hasDuplicateDates(rows, x_column)) {
+      console.log(`⚠️  Detected duplicate dates in ${x_column}, finding alternative x-axis...`);
+      
+      const alternative = this.findAlternativeXColumn(rows, x_column, columnAnalysis);
+      
+      if (alternative) {
+        console.log(`✓ Using ${alternative} as x-axis instead`);
+        x_column = alternative;
+        useAlternativeX = true;
+      } else {
+        // Use row numbers as fallback
+        console.log(`✓ Using row numbers as x-axis instead`);
+        rows = rows.map((row, index) => ({ ...row, _row_number: index + 1 }));
+        x_column = '_row_number';
+        columnAnalysis['_row_number'] = { type: 'numeric', priority: 1 };
+        useAlternativeX = true;
+        skipAggregation = true; // Don't aggregate when using row numbers
+      }
+    }
+
+    // If using row numbers, skip aggregation
+    if (skipAggregation) {
+      const labels = rows.map((r, i) => String(i + 1));
+      const data = rows.map(r => this.roundNumber(this.parseNumber(r[y_column])));
+      const formatted = data.map(v => this.formatNumberByType(v, columnAnalysis[y_column]?.type));
+
+      return {
+        type: 'chart',
+        chartType: 'bar',
+        labels,
+        data,
+        axis_labels: {
+          x: 'Row',
+          y: this.generateLabel(y_column)
+        },
+        extra: { 
+          formatted,
+          note: `Original date column (${originalXColumn}) had duplicates`
+        }
+      };
+    }
 
     const aggregated = this.aggregate(rows, x_column, y_column, aggregation);
 
@@ -599,7 +754,10 @@ Return ONLY valid JSON.`;
         x: this.generateLabel(x_column),
         y: this.generateLabel(y_column)
       },
-      extra: { formatted }
+      extra: { 
+        formatted,
+        note: useAlternativeX ? `Original date column (${originalXColumn}) had duplicates` : undefined
+      }
     };
   }
 
@@ -693,10 +851,10 @@ Return ONLY valid JSON.`;
   }
 
   /**
-   * Simple table fallback
+   * Simple table fallback (excluding ID columns)
    */
   buildSimpleTable(rows) {
-    const columns = Object.keys(rows[0]);
+    const columns = Object.keys(rows[0]).filter(col => !this.shouldSkipColumn(col));
     const labels = columns.map(col => this.generateLabel(col));
     const data = rows.map(row =>
       columns.map(col => this.formatValueByType(row[col]))

@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
     } else {
       // Create new conversation
       const selectedModel = model || 'openai';
-      const newConversation = await chatModels.createConversation(user_id, selectedModel);
+      const newConversation = await chatModels.createConversation(user_id);
       conversationId = newConversation.id;
       console.log('✨ Created new conversation:', conversationId);
     }
