@@ -280,7 +280,7 @@ export async function webSearchTool({ query, include_images = true, max_results 
     
     console.error(`✅ Search completed: ${results.results.length} results, ${results.images.length} images`);
     if (results.answer) {
-      console.error(`📝 AI summary generated`);
+      // console.error(`📝 AI summary generated`);
     }
     
     // ✅ Log warning if no images found

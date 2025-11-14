@@ -104,7 +104,7 @@ router.post('/', async (req, res) => {
     const responseData = {
       conversation_id: conversationId,
       // message: summarized,
-      message_raw: response.message,
+      message: response.message,
       toolsCalled: response.toolsCalled,
       model: response.model,
       usage: response.usage
