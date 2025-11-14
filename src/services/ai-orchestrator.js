@@ -1,4 +1,4 @@
-// src/services/ai-orchestrator.js - ULTRA-OPTIMIZED (77% token reduction)
+// src/services/ai-orchestrator.js - COMPLETE WITH ALL FEATURES
 import { openRouterClient, models, isConfigured } from '../config/ai-clients.js';
 import { ModelSelector } from '../utils/model-selector.js';
 import MCPClient from './mcp-client.js';
@@ -14,36 +14,7 @@ class AIOrchestrator {
     this.dbService = DatabaseService;
   }
 
-  /**
-   * Detect if query needs database context
-   */
-  needsDatabaseContext(message) {
-    const lowerMessage = message.toLowerCase();
-    
-    // Direct database keywords
-    const databaseKeywords = [
-      'query', 'database', 'sql', 'table', 'select',
-      'payment', 'vehicle', 'invoice', 'contact', 'customer',
-      'income', 'revenue', 'expense', 'transaction', 'cost',
-      'show me', 'find all', 'list', 'how many', 'count',
-      'sum', 'total', 'average', 'group by',
-      'where', 'filter', 'search for', 'contract', 'rental',
-      'purchase', 'sales', 'order', 'hire', 'sold'
-    ];
-    
-    // Pre-configured field names (add your actual field names)
-    const fieldNames = [
-      'total_income', 'contract_income', 'vehicle_income',
-      'total_cost', 'contract_cost', 'vehicle_cost',
-      'rental', 'income'
-    ];
-    
-    // Check if any keyword matches
-    const hasKeyword = databaseKeywords.some(keyword => lowerMessage.includes(keyword));
-    const hasFieldName = fieldNames.some(field => lowerMessage.includes(field));
-    
-    return hasKeyword || hasFieldName;
-  }
+  // Add/update this in AIOrchestrator class:
 
   async getDatabaseContext(user_id) {
     try {
@@ -53,6 +24,7 @@ class AIOrchestrator {
         return null;
       }
       
+      // Format for our use
       return {
         schemas: [{
           schema_name: schemaInfo.schema_name,
@@ -62,26 +34,27 @@ class AIOrchestrator {
         structures: {
           [schemaInfo.schema_name]: schemaInfo.tables
         },
-        available_fields: schemaInfo.available_fields || []
+        available_fields: schemaInfo.available_fields || [] // INCLUDES PRE-CONFIGURED FIELDS
       };
       
     } catch (error) {
+      // console.error('❌ Failed to get database context:');
       return null;
     }
   }
 
-  /**
-   * OPTIMIZED: Format database schema WITHOUT sample data
-   * Reduces tokens by ~1500 per request
-   */
-  formatDatabaseSchema(dbContext) {
-    let output = 'TABLES:\n';
+  formatDatabaseWithSamples(dbContext, samples) {
+    let output = 'AVAILABLE TABLES WITH SAMPLE DATA:\n';
     
     for (const schema of dbContext.schemas) {
       const structure = dbContext.structures[schema.schema_name];
       
       for (const table of structure) {
-        output += `${table.name}: ${table.columns.map(c => `${c.name}(${c.type})`).join(', ')}\n`;
+        output += `\nTable: ${table.name}\n`;
+        output += `Columns: ${table.columns.map(c => `${c.name} (${c.type})`).join(', ')}\n`;
+        
+        const sampleData = samples[table.name] || [];
+        output += `Sample Data:\n${sampleData.length > 0 ? JSON.stringify(sampleData, null, 2) : 'No samples'}\n`;
       }
     }
     
@@ -89,100 +62,268 @@ class AIOrchestrator {
   }
 
   /**
-   * OPTIMIZED: Compact pre-configured fields format
-   * Reduces tokens by ~700 per request
+   * Build comprehensive system message with all features
    */
-  formatPreConfiguredFields(fields) {
-    if (!fields || fields.length === 0) return '';
-    
-    let output = '\nPRE-CONFIGURED FIELDS (use get_field_query first):\n';
-    
-    for (const field of fields) {
-      // Compact one-line format
-      output += `- ${field.name}: ${field.description}\n`;
-    }
-    
-    return output;
-  }
+  async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo) {
+    let systemContent = `Current date and time:
+    - Date: ${timeInfo.localDate}
+    - Time: ${timeInfo.localTime}
+    - Timezone: ${timezone}
 
-  /**
-   * ULTRA-OPTIMIZED: Build system message with minimal tokens
-   * Before: ~3000 tokens
-   * After: ~700 tokens
-   * Savings: 77%
-   */
-  async buildSystemMessage(user_id, user_name, user_location, timezone, timeInfo, includeDatabase = false) {
-    // CORE SYSTEM PROMPT (minimal, essential only)
-    let systemContent = `Date: ${timeInfo.localDate}, Time: ${timeInfo.localTime}, Timezone: ${timezone}
-User: ${user_name}
+    User: ${user_name}
 
-You are an AI assistant with tool access. Use tools when needed for accurate responses.`;
+    You are a helpful AI assistant with access to various tools.
+    Use tools when needed to provide accurate, helpful responses.`;
 
-    // LOCATION CONTEXT (compact)
+    // Only add location context if user has location
     if (user_location && user_location.lat && user_location.lng) {
       systemContent += `
-Location: ${user_location.lat}, ${user_location.lng} (use for location queries)`;
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      USER LOCATION AVAILABLE
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      Location: ${user_location.lat}, ${user_location.lng}
+
+      For location-based queries, use these coordinates automatically.
+      Don't ask "where are you?" - the location is provided above.
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
     }
 
-    // DATABASE CONTEXT (CONDITIONAL & OPTIMIZED)
-    if (includeDatabase) {
-      console.log('📊 Including database context (optimized)');
+    // Only add database context if user has database access
+    const dbContext = await this.getDatabaseContext(user_id);
+
+    if (dbContext && dbContext.schemas.length > 0) {
+      const samples = await this.dbService.getTableSamples(user_id, 3);
       
-      const dbContext = await this.getDatabaseContext(user_id);
+      systemContent += `
 
-      if (dbContext && dbContext.schemas.length > 0) {
-        systemContent += `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    DATABASE ANALYTICS (AUTO-EXECUTION)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-=== DATABASE: ${dbContext.schemas[0].client_name} (${dbContext.schemas[0].schema_name}) ===
+    CLIENT: ${dbContext.schemas[0].client_name}
+    SCHEMA: ${dbContext.schemas[0].schema_name}
 
-${this.formatDatabaseSchema(dbContext)}`;
+    ${this.formatDatabaseWithSamples(dbContext, samples)}`;
 
-        // PRE-CONFIGURED FIELDS (compact format)
-        if (dbContext.available_fields && dbContext.available_fields.length > 0) {
-          systemContent += this.formatPreConfiguredFields(dbContext.available_fields);
-        }
+    // ADD PRE-CONFIGURED FIELDS SECTION
+    if (dbContext.available_fields && dbContext.available_fields.length > 0) {
+      systemContent += `
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        PRE-CONFIGURED FIELDS (Complex Queries)
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        systemContent += `
-DATABASE TOOLS:
-- get_field_query(field_name) - Get pre-built query for fields above
-- execute_query(query) - Execute SQL (SELECT only, auto-limited)
+        These fields have pre-built queries with correct formulas and JOINs.
+        ⚠️ THESE ARE NOT COLUMNS - they are calculated fields!
 
-WORKFLOW:
-For pre-configured fields: get_field_query → modify query → execute_query
-For direct queries: execute_query immediately
-Execute autonomously, no confirmation needed.`;
-      }
-    } else {
-      console.log('⚡ Skipping database context');
+        ${dbContext.available_fields.map(field => `
+        - ${field.name}
+          Description: ${field.description}
+          Source: ${field.source_table}
+          
+          To use this field:
+          1. Call get_field_query(field_name: "${field.name}")
+          2. You'll receive the base query with correct formula
+          3. Add user's filters (WHERE, etc.)
+          4. Execute with execute_query
+          
+          ❌ DO NOT try to query a column called "${field.name}"
+          ✅ DO use get_field_query first!
+        `).join('\n')}
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
     }
 
-    // GOOGLE TOOLS (compact)
     systemContent += `
+      AVAILABLE TOOLS:
+      1. get_field_query - Get pre-built query for fields listed above
+      2. execute_query - Execute SQL query on database
 
-=== GOOGLE TOOLS ===
-Before create_calendar_event/send_email: Show preview, wait for confirmation.
-For search_contact with multiple matches: Show numbered list, wait for selection.
-Calendar timezone: ${timezone}, Email signature: "${user_name}"
-Read-only tools (no confirmation): search_contact, list_calendar_events, check_google_connection`;
+      QUERY WORKFLOW:
 
-    // MAPS (compact)
+      For PRE-CONFIGURED FIELDS:
+      User: "What's the total income for vehicle HV71?"
+      Step 1: get_field_query(field_name: "total_income")
+              → Returns base query with correct formula
+      Step 2: Add filter: WHERE vehicle_rego = 'HV71'
+      Step 3: execute_query(schema_name, modified_query, params)
+              → Get results
+
+      For REGULAR TABLE QUERIES:
+      User: "Show me all payments from John"
+      Step 1: execute_query directly
+              → SELECT * FROM payment_xero WHERE contact_name ILIKE $1
+
+      EXECUTION:
+      - Only SELECT allowed (read-only, safe)
+      - Execute immediately - no confirmation needed
+      - LIMIT auto-added by system
+
+      SMART QUERY BUILDING:
+      1. Identify if field is pre-configured → use get_field_query
+      2. Use exact column names from tables above
+      3. Text filters: WHERE name ILIKE $1 → params: ['%john%']
+      4. Aggregations: SUM(), COUNT(), AVG() with GROUP BY
+      5. Execute immediately, answer user
+
+      Execute queries autonomously using schema and samples above.
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  }
+
+    // Google Tools Workflow
     systemContent += `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    GOOGLE TOOLS WORKFLOW
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-=== MAPS ===
-${user_location ? `Location available: ${user_location.lat}, ${user_location.lng}` : 'No location'}
-Use specific queries (e.g., "fitness center gym" not "gym")`;
+    CONTACT DISAMBIGUATION:
+    When search_contact returns requiresDisambiguation: true:
+    1. Show numbered list:
+      "I found [X] people named '[name]':
+      1. [Full Name] ([email])
+      2. [Full Name] ([email])
+      Which one?"
 
-    // WEB SEARCH (compact)
+    2. Wait for selection: "1", "2", "first one", or actual name
+    3. Remember the ORIGINAL action (email/calendar) and continue with it
+
+    When search_contact returns noCloseMatch: true:
+    "No close match for '[name]'. Did you mean:
+    - [Suggestion 1]
+    - [Suggestion 2]
+    Or provide their email directly."
+
+    Wait for clarification before proceeding.
+
+    ACTION CONFIRMATION (Required before execution):
+    Before create_calendar_event:
+    "I'll create a meeting with [Name]:
+    - [Day] at [Time]
+    - [Duration/Topic]
+    Should I create it?"
+
+    Before send_email:
+    "I'll send this to [Name] ([email]):
+    [Brief preview of content]
+    Should I send it?"
+
+    Wait for confirmation: yes/ok/sure/go ahead/send it/create it
+    Do not proceed on: no/wait/cancel/stop/not yet
+
+    If user wants changes, ask what to modify, show updated preview, confirm again.
+
+    Before delete_calendar_event:
+    "Delete [Event Name] on [Date]? This can't be undone."
+
+    CALENDAR EVENT DETAILS:
+    - Use timezone: ${timezone}
+    - Format: ISO 8601 (YYYY-MM-DDTHH:mm:ss)
+    - Current date: ${timeInfo.localDate}
+    - Calculate relative times from current date/time
+
+    EMAIL SIGNATURE:
+    Always sign emails:
+    "Best regards,
+    ${user_name}"
+
+    Never use "[Your Name]" or placeholders.
+
+    READ-ONLY OPERATIONS (No confirmation needed):
+    - search_contact (just searching)
+    - list_calendar_events (just listing)
+    - check_google_connection (status check)
+
+    Execute these immediately without confirmation.
+
+    FLOW TRACKING:
+    - Remember user's original intent (email vs calendar vs delete)
+    - When user selects "1" or "2" after contact list → continue original action
+    - Don't switch action types mid-conversation
+
+    Example:
+    User: "Create meeting with fitrah tomorrow"
+    → search_contact finds 3 matches
+    → Show numbered list
+    User: "1"
+    → Create CALENDAR EVENT with selected contact (not email!)
+    → Show event preview, wait for confirmation
+    User: "yes"
+    → Execute create_calendar_event
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    // Maps & Location Tools
     systemContent += `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    MAPS & LOCATION TOOLS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-=== WEB SEARCH ===
-Use for: current events, news, real-time data, verification
-Tools: web_search, news_search, deep_search
+    ${user_location ? `✅ USER LOCATION: ${user_location.lat}, ${user_location.lng}
+    Location is auto-injected for all maps tools - just call them.` : '⚠️ No location available - ask user if needed for maps queries'}
+    CRITICAL - USE SPECIFIC QUERIES:
+    ❌ WRONG: query: "gym" → returns stores selling equipment
+    ✅ CORRECT: query: "fitness center gym" → returns actual gyms
 
-GENERAL RULES:
-- Choose appropriate tools based on user's question
-- Execute autonomously when safe (database, search, read-only)
-- Confirm before actions with side effects (email, calendar events, deletions)`;
+    Examples:
+    - "fitness center gym" → gyms
+    - "coffee shop cafe" → coffee shops
+    - "italian restaurant" → restaurants
+    - "24-hour pharmacy" → pharmacies
+
+    TOOLS:
+    1. search_places - Find places by type/name
+    2. get_directions - Route with traffic and ETA
+    3. get_place_details - Hours, phone, reviews for specific place
+    4. calculate_distance - Quick distance/time between points
+    5. nearby_search - Discover top-rated places
+
+    RESPONSE FORMAT:
+    Keep responses BRIEF - structured data is returned separately.
+    ✅ "Found 5 gyms near you. Want details on any?"
+    ❌ Don't list all details (it's in the structured data already)
+
+    For place details: User asks "tell me about #2" → call get_place_details
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    // Web Search & News
+    systemContent += `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    WEB SEARCH & NEWS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    WHEN TO SEARCH:
+    - Current events, news, recent information
+    - Real-time data (prices, rates, scores, weather beyond local)
+    - Information beyond knowledge cutoff
+    - User explicitly asks to "search" or "look up"
+    - Verification of facts or recent developments
+
+    TOOLS:
+    1. web_search - General internet search (returns AI summary + sources)
+    2. news_search - Recent news articles (specify days: 1-30)
+    3. deep_search - Comprehensive research (more detailed results)
+
+    TOOL SELECTION:
+    - User asks "search for..." or "look up..." → web_search
+    - User asks "latest news" or "recent..." → news_search
+    - User asks "research..." or "detailed analysis" → deep_search
+
+    RESPONSE FORMAT:
+    Synthesize information naturally, mention sources.
+    ✅ "According to recent reports, [information]..."
+    ✅ "Based on search results, [finding]..."
+    ❌ Don't copy-paste long excerpts
+    ❌ Don't just list URLs
+
+    Keep responses concise and directly answer the query.
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+        // Final tool usage section
+    systemContent += `
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    TOOL USAGE
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    Choose the right tools based on the user's question.
+    Execute autonomously when appropriate (database queries, searches, read-only operations).
+    Ask confirmation when needed (emails, calendar events, deletions).`;
 
     return systemContent;
   }
@@ -196,11 +337,7 @@ GENERAL RULES:
       throw new Error('user_id is required');
     }
     
-    // Detect if database context is needed
-    const needsDB = this.needsDatabaseContext(message);
-    console.log(`🔍 Database context needed: ${needsDB ? 'YES' : 'NO'}`);
-    
-    // Determine which model to use
+    // Step 1: Determine which model to use
     let selectedModel;
     if (requestedModel) {
       selectedModel = requestedModel;
@@ -222,15 +359,19 @@ GENERAL RULES:
     }
     
     console.log(`📡 Using model: ${modelConfig.name} (${modelConfig.id})`);
+    // console.log(`   User: ${user_id}`);
+    // console.log(`💬 Conversation history: ${conversationHistory.length} messages`);
     if (user_location) {
-      console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
+      // console.log(`📍 Location: ${user_location.lat}, ${user_location.lng}`);
     }
     
-    // Get MCP tools
+    // Step 2: Get MCP tools - ALL OF THEM
     await this.mcpClient.connect();
     const mcpTools = await this.mcpClient.listTools();
     
-    // Convert MCP tools to OpenAI format
+    // console.log('🔧 Available tools:', mcpTools.tools.map(t => t.name));
+    
+    // Step 3: Convert MCP tools to OpenAI format - PASS ALL TOOLS
     const tools = mcpTools.tools.map(tool => ({
       type: 'function',
       function: {
@@ -240,7 +381,7 @@ GENERAL RULES:
       }
     }));
     
-    // Process with OpenRouter (pass needsDB flag)
+    // Step 4: Process with OpenRouter
     return await this.processWithOpenRouter(
       message, 
       user_id, 
@@ -248,12 +389,11 @@ GENERAL RULES:
       tools,
       conversationHistory,
       user_location,
-      user_name,
-      needsDB
+      user_name
     );
   }
   
-  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null, user_name, includeDatabase = false) {
+  async processWithOpenRouter(message, user_id, modelId, tools, conversationHistory = [], user_location = null, user_name) {
     // Detect timezone from user location
     let timezone = 'Asia/Makassar';
     
@@ -263,20 +403,19 @@ GENERAL RULES:
 
     const timeInfo = getCurrentTimeInTimezone(timezone);
     
-    // Build optimized system message
+    // Build comprehensive system message
     const systemContent = await this.buildSystemMessage(
       user_id, 
       user_name, 
       user_location, 
       timezone, 
-      timeInfo,
-      includeDatabase
+      timeInfo
     );
 
-    console.log(systemContent);
+    // console.log("sytem content", systemContent)
     
     const estimatedTokens = Math.ceil(systemContent.length / 4);
-    console.log(`📝 System prompt: ${systemContent.length} chars (~${estimatedTokens} tokens) ${includeDatabase ? '(with DB)' : '(no DB)'}`);
+    console.log(`📝 System prompt: ${systemContent.length} chars (~${estimatedTokens} tokens)`);
     
     // Build system message
     const systemMessage = {
@@ -289,6 +428,7 @@ GENERAL RULES:
     
     if (conversationHistory.length > 0) {
       messages = [systemMessage, ...conversationHistory];
+      // console.log(`📚 Using ${conversationHistory.length} messages from history`);
     } else {
       messages = [systemMessage, { role: 'user', content: message }];
       console.log('✨ Starting new conversation');
@@ -359,7 +499,7 @@ GENERAL RULES:
           'search_contact',
           'send_email',
           'execute_query',
-          'get_field_query',
+          'get_field_query', //new 
         ];
         
         if (toolsRequiringUserId.includes(toolCall.function.name)) {
